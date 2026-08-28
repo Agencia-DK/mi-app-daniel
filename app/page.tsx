@@ -68,6 +68,8 @@ export default function Home() {
   const [ideas, setIdeas] = useState(12);
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
+  const levelTier = level >= 30 ? 'gold' : level >= 15 ? 'silver' : 'bronze';
+  const levelTierLabel = level >= 30 ? 'oro' : level >= 15 ? 'plata' : 'bronce';
 
   const chooseLevel = (next: number) => {
     if (next > 40) return;
@@ -80,7 +82,7 @@ export default function Home() {
     <main className="stage">
       <section className="dashboard" aria-label="Panel de progreso personal">
         <header className="topbar">
-          <div className="profile"><div className="avatar" style={{ backgroundImage: `url(${levelCover})` }} role="img" aria-label={`Personaje del nivel ${level}`} /><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
+          <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
           <div className="topStats"><div><b>XP</b><strong>2,450</strong></div><div><b>Monedas</b><strong>3,800</strong></div></div>
         </header>
 
