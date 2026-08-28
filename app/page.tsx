@@ -98,6 +98,8 @@ const initialIdeas = [
   { title: 'Newsletter de oportunidades', detail: 'Ideas accionables de tecnología y negocios', tags: ['Contenido', 'Negocios'], status: 'Borrador' },
 ];
 
+const dayKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+
 export default function Home() {
   const [active, setActive] = useState('HOME');
   const [level, setLevel] = useState(1);
@@ -105,8 +107,8 @@ export default function Home() {
   const [ideaItems, setIdeaItems] = useState(initialIdeas);
   const [newIdea, setNewIdea] = useState('');
   const [showIdeaForm, setShowIdeaForm] = useState(false);
-  const [doneActivities, setDoneActivities] = useState([0, 2, 4]);
-  const [doneTasks, setDoneTasks] = useState([1]);
+  const [doneActivities, setDoneActivities] = useState<number[]>([]);
+  const [doneTasks, setDoneTasks] = useState<number[]>([]);
   const [activityItems, setActivityItems] = useState(dailyActivities);
   const [taskItems, setTaskItems] = useState(pendingActivities);
   const [reminderItems, setReminderItems] = useState(initialReminders);
@@ -116,6 +118,8 @@ export default function Home() {
   const [itemDescription, setItemDescription] = useState('');
   const [itemXp, setItemXp] = useState('5');
   const [itemCategory, setItemCategory] = useState('Compras');
+  const [habitToDelete, setHabitToDelete] = useState<number | null>(null);
+  const [storageReady, setStorageReady] = useState(false);
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
@@ -125,7 +129,7 @@ export default function Home() {
   const taskCompletion = taskItems.length ? Math.round(doneTasks.length / taskItems.length * 100) : 0;
   const earnedXp = doneActivities.reduce((total, index) => total + Number(activityItems[index]?.[3].replace(/\D/g, '') || 0), 0) + doneTasks.reduce((total, index) => total + Number(taskItems[index]?.[3].replace(/\D/g, '') || 0), 0);
   const dayCompletion = Math.round((completion + taskCompletion) / 2);
-  const liveWeekProgress = weekProgress.map((value, index) => index === calendar.todayIndex ? completion : value);
+  const liveWeekProgress = weekProgress.map((value, index) => index > calendar.todayIndex ? 0 : index === calendar.todayIndex ? completion : value);
 
   useEffect(() => {
     const now = new Date();
@@ -135,6 +139,48 @@ export default function Home() {
     const days = dayLetters.map((day, index) => { const date = new Date(monday); date.setDate(monday.getDate() + index); return { day, date: String(date.getDate()) }; });
     setCalendar({ label: now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }), date: now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }), todayIndex: (now.getDay() + 6) % 7, days });
   }, []);
+
+  useEffect(() => {
+    try {
+      const today = dayKey();
+      const savedDay = localStorage.getItem('daniel-os-day');
+      const savedHabits = JSON.parse(localStorage.getItem('daniel-os-habits') || 'null') as string[][] | null;
+      const savedTasks = JSON.parse(localStorage.getItem('daniel-os-tasks') || 'null') as string[][] | null;
+      const savedDoneHabits = JSON.parse(localStorage.getItem('daniel-os-done-habits') || '[]') as number[];
+      const savedDoneTasks = JSON.parse(localStorage.getItem('daniel-os-done-tasks') || '[]') as number[];
+      if (savedHabits) setActivityItems(savedHabits);
+      if (savedTasks) setTaskItems(savedDay && savedDay !== today ? savedTasks.filter((_, index) => !savedDoneTasks.includes(index)) : savedTasks);
+      if (savedDay === today) {
+        setDoneActivities(savedDoneHabits);
+        setDoneTasks(savedDoneTasks);
+      }
+      localStorage.setItem('daniel-os-day', today);
+    } catch {
+      localStorage.setItem('daniel-os-day', dayKey());
+    }
+    setStorageReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    localStorage.setItem('daniel-os-habits', JSON.stringify(activityItems));
+    localStorage.setItem('daniel-os-tasks', JSON.stringify(taskItems));
+    localStorage.setItem('daniel-os-done-habits', JSON.stringify(doneActivities));
+    localStorage.setItem('daniel-os-done-tasks', JSON.stringify(doneTasks));
+  }, [storageReady, activityItems, taskItems, doneActivities, doneTasks]);
+
+  useEffect(() => {
+    const now = new Date();
+    const midnight = new Date(now);
+    midnight.setHours(24, 0, 0, 0);
+    const timer = window.setTimeout(() => {
+      setDoneActivities([]);
+      setTaskItems((current) => current.filter((_, index) => !doneTasks.includes(index)));
+      setDoneTasks([]);
+      localStorage.setItem('daniel-os-day', dayKey());
+    }, midnight.getTime() - now.getTime());
+    return () => window.clearTimeout(timer);
+  }, [doneTasks]);
 
   const chooseLevel = (next: number) => {
     if (next > 40) return;
@@ -146,6 +192,12 @@ export default function Home() {
   const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
   const toggleTask = (index: number) => setDoneTasks((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
   const toggleReminder = (index: number) => setDoneReminders((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
+  const deleteHabit = () => {
+    if (habitToDelete === null) return;
+    setActivityItems((current) => current.filter((_, index) => index !== habitToDelete));
+    setDoneActivities((current) => current.filter((index) => index !== habitToDelete).map((index) => index > habitToDelete ? index - 1 : index));
+    setHabitToDelete(null);
+  };
   const openItemModal = (type: 'habit' | 'task' | 'reminder') => { setModalType(type); setItemName(''); setItemDescription(''); setItemXp(type === 'habit' ? '5' : '0'); setItemCategory('Compras'); };
   const saveItem = () => {
     const name = itemName.trim();
@@ -180,9 +232,9 @@ export default function Home() {
         <header className="topbar">
           <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
           <div className="topStats">
-            <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>2,450</strong></span></div>
-            <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>3,800</strong></span></div>
-            <div className="statCard streakCard"><img src="/icons/streak.webp" alt="" /><span><b>Racha</b><strong>28 <small>días</small></strong></span></div>
+            <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>{earnedXp.toLocaleString('es-MX')}</strong></span></div>
+            <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>0</strong></span></div>
+            <div className="statCard streakCard"><img src="/icons/streak.webp" alt="" /><span><b>Racha</b><strong>0 <small>días</small></strong></span></div>
           </div>
         </header>
 
@@ -212,16 +264,16 @@ export default function Home() {
           <section className="activitiesView" aria-label="Panel de actividades">
             <div className="activitiesHeading"><div><span>HOY · {calendar.date || 'FECHA ACTUAL'}</span><h1>Actividades</h1><p>Pequeñas acciones, grandes resultados.</p></div><div className="dailyScore"><b>{doneActivities.length}/{activityItems.length}</b><span>completadas</span></div></div>
             <div className="activitySummary">
-              <article><img src="/icons/streak.webp" alt="" /><span><small>Racha</small><b>28 días</b></span></article>
-              <article><img src="/icons/xp.webp" alt="" /><span><small>XP de hoy</small><b>+420</b></span></article>
+              <article><img src="/icons/streak.webp" alt="" /><span><small>Racha</small><b>0 días</b></span></article>
+              <article><img src="/icons/xp.webp" alt="" /><span><small>XP de hoy</small><b>+{earnedXp}</b></span></article>
               <article><img src="/icons/habits.webp" alt="" /><span><small>Objetivo diario</small><b>{completion}%</b></span></article>
               <article><img src="/icons/pending.webp" alt="" /><span><small>Pendientes</small><b>{taskItems.length} activos</b></span></article>
             </div>
             <div className="activityBoard">
-              <article className="activityBox habitsBox"><header><div><b>Hábitos de hoy</b><small>Marca lo que vayas completando</small></div><div className="boxActions"><strong>{doneActivities.length}/{activityItems.length}</strong><button onClick={() => openItemModal('habit')}>＋ Agregar hábito</button></div></header><div className="activityList">{activityItems.map(([name, detail, icon, xp], index) => <button className={doneActivities.includes(index) ? 'done' : ''} onClick={() => toggleActivity(index)} key={`${name}-${index}`}><i>{doneActivities.includes(index) ? '✓' : ''}</i><img src={icon} alt="" /><span><b>{name}</b><small>{detail}</small></span><em>{xp}</em></button>)}</div></article>
+              <article className="activityBox habitsBox"><header><div><b>Hábitos de hoy</b><small>Marca lo que vayas completando</small></div><div className="boxActions"><strong>{doneActivities.length}/{activityItems.length}</strong><button onClick={() => openItemModal('habit')}>＋ Agregar hábito</button></div></header><div className="activityList">{activityItems.map(([name, detail, icon, xp], index) => <div className="activityRow" key={`${name}-${index}`}><button className={`activityCheck ${doneActivities.includes(index) ? 'done' : ''}`} onClick={() => toggleActivity(index)}><i>{doneActivities.includes(index) ? '✓' : ''}</i><img src={icon} alt="" /><span><b>{name}</b><small>{detail}</small></span><em>{xp}</em></button><button className="deleteHabit" onClick={() => setHabitToDelete(index)} aria-label={`Eliminar hábito ${name}`} title="Eliminar hábito">🗑</button></div>)}</div></article>
               <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><div className="boxActions"><strong>{doneTasks.length}/{taskItems.length}</strong><button onClick={() => openItemModal('task')}>＋ Agregar tarea</button></div></header><div className="pendingList">{taskItems.map(([name, description, difficulty, xp], index) => <button className={doneTasks.includes(index) ? 'done' : ''} onClick={() => toggleTask(index)} key={`${name}-${index}`}><i>{doneTasks.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><span className="taskMeta"><em className={`priority ${difficulty.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`}>{difficulty}</em><small>{xp}</small></span></button>)}</div></article>
               <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div><button>Ver detalles →</button></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{earnedXp}</b><i><em style={{width:`${Math.min(earnedXp / 3, 100)}%`}} /></i><small>{earnedXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
-              <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><strong>{completion}%</strong></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={index === calendar.todayIndex ? 'todayBar' : ''} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
+              <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><strong>{completion}%</strong></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={`${index === calendar.todayIndex ? 'todayBar' : ''} ${index > calendar.todayIndex ? 'futureBar' : ''}`} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
               <article className="activityBox generalBox"><header><div><b>▰ Pendientes generales</b><small>Ideas, compras y recordatorios sin fecha · sin XP ni monedas</small></div><button onClick={() => openItemModal('reminder')}>＋ Agregar</button></header><div className="reminderList">{reminderItems.map(([name, description, category], index) => <button className={doneReminders.includes(index) ? 'done' : ''} onClick={() => toggleReminder(index)} key={`${name}-${index}`}><i>{doneReminders.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><em className={`reminderTag ${category.toLowerCase()}`}>{category}</em><strong>⋮</strong></button>)}</div></article>
             </div>
           </section>
@@ -266,6 +318,7 @@ export default function Home() {
         )}
 
         {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : modalType === 'task' ? 'NUEVA TAREA' : 'NUEVO RECORDATORIO'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : modalType === 'task' ? 'Agregar pendiente' : 'Pendiente general'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label>{modalType === 'reminder' ? <fieldset><legend>Categoría</legend><div className="categoryOptions">{reminderCategories.map((category) => <button className={itemCategory === category ? 'selected' : ''} onClick={() => setItemCategory(category)} key={category}>{category}</button>)}</div><p className="noReward">Este recordatorio no otorga XP ni monedas.</p></fieldset> : <fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset>}<button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : modalType === 'task' ? 'tarea' : 'recordatorio'}</button></section></div>}
+        {habitToDelete !== null && <div className="modalBackdrop" role="presentation" onMouseDown={() => setHabitToDelete(null)}><section className="deleteModal" role="alertdialog" aria-modal="true" aria-labelledby="delete-habit-title" onMouseDown={(event) => event.stopPropagation()}><span>ELIMINAR HÁBITO</span><h2 id="delete-habit-title">¿Quieres borrar “{activityItems[habitToDelete]?.[0]}”?</h2><p>El hábito dejará de aparecer en tu lista diaria.</p><div><button onClick={() => setHabitToDelete(null)}>Cancelar</button><button className="confirmDelete" onClick={deleteHabit}>Confirmar</button></div></section></div>}
 
         <nav className="nav" aria-label="Navegación principal">
           {['Ideas', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '◎'}</span>{item}</button>)}
