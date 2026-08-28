@@ -83,7 +83,11 @@ export default function Home() {
       <section className="dashboard" aria-label="Panel de progreso personal">
         <header className="topbar">
           <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
-          <div className="topStats"><div><b>XP</b><strong>2,450</strong></div><div><b>Monedas</b><strong>3,800</strong></div></div>
+          <div className="topStats">
+            <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>2,450</strong></span></div>
+            <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>3,800</strong></span></div>
+            <div className="statCard streakCard"><img src="/icons/streak.webp" alt="" /><span><b>Racha</b><strong>28 <small>días</small></strong></span></div>
+          </div>
         </header>
 
         {active === 'Misiones' ? (
@@ -115,14 +119,14 @@ export default function Home() {
 
             <section className="lower">
               <div className="today"><div className="sectionTitle"><b>HOY</b><span>Jueves, 27 de agosto</span></div><div className="habitGrid">{habits.map(([name, value, icon]) => <article className="habit" key={name}><img className="habitIcon" src={icon} alt="" /><div><small>{name}</small><b>{value}</b></div></article>)}</div></div>
-              <article className="mission"><div className="sectionTitle"><b>MISIÓN PRINCIPAL</b></div><h2>Convertirme en<br/>Creative Strategist</h2><div className="missionBody"><ul><li>Diseño visual</li><li>Psicología del consumidor</li></ul><div className="crystal">◆</div></div></article>
+              <button className="ideaPanel" onClick={() => setIdeas(ideas + 1)} aria-label="Añadir una idea"><img src="/icons/ideas.webp" alt="" /><span><small>CREAR</small><b>＋ IDEA</b><em>{ideas} ideas guardadas</em></span></button>
             </section>
           </>
         )}
 
         <nav className="nav" aria-label="Navegación principal">
           {['Inicio', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Inicio' ? '⌂' : '◎'}</span>{item}</button>)}
-          <button className="idea" onClick={() => setIdeas(ideas + 1)} aria-label="Añadir idea"><b>＋</b>IDEA <em>{ideas}</em></button>
+          <button className="homeButton" onClick={() => setActive('Inicio')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
           {['Progreso', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Progreso' ? '▥' : '♙'}</span>{item}</button>)}
         </nav>
       </section>
