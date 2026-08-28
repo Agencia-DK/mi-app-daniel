@@ -80,11 +80,20 @@ const pendingActivities = [
 
 const weekProgress = [65, 80, 55, 90, 72, 45, 30];
 
+const initialIdeas = [
+  { title: 'Agencia de contenido con IA', detail: 'Servicio mensual para negocios locales', tags: ['IA', 'Marketing'], status: 'Explorando' },
+  { title: 'App de hábitos para creativos', detail: 'Progreso simple con recompensas y niveles', tags: ['App', 'Productividad'], status: 'Validar' },
+  { title: 'Estudio de marca personal', detail: 'Estrategia, diseño y contenido premium', tags: ['Diseño', 'Servicios'], status: 'Prioridad' },
+  { title: 'Newsletter de oportunidades', detail: 'Ideas accionables de tecnología y negocios', tags: ['Contenido', 'Negocios'], status: 'Borrador' },
+];
+
 export default function Home() {
-  const [active, setActive] = useState('Inicio');
+  const [active, setActive] = useState('HOME');
   const [level, setLevel] = useState(1);
   const [completed, setCompleted] = useState(false);
-  const [ideas, setIdeas] = useState(12);
+  const [ideaItems, setIdeaItems] = useState(initialIdeas);
+  const [newIdea, setNewIdea] = useState('');
+  const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [doneActivities, setDoneActivities] = useState([0, 2, 4]);
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
@@ -95,10 +104,17 @@ export default function Home() {
     if (next > 40) return;
     setLevel(next);
     setCompleted(false);
-    setActive('Inicio');
+    setActive('HOME');
   };
 
   const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
+  const saveIdea = () => {
+    const title = newIdea.trim();
+    if (!title) return;
+    setIdeaItems((current) => [{ title, detail: 'Idea nueva · agrega detalles cuando la desarrolles', tags: ['Nueva'], status: 'Capturada' }, ...current]);
+    setNewIdea('');
+    setShowIdeaForm(false);
+  };
 
   return (
     <main className="stage">
@@ -112,7 +128,15 @@ export default function Home() {
           </div>
         </header>
 
-        {active === 'Misiones' ? (
+        {active === 'Ideas' ? (
+          <section className="ideasView" aria-label="Panel de ideas de negocio">
+            <div className="ideasHeading"><div><span>BANCO DE OPORTUNIDADES</span><h1>Ideas</h1><p>Guarda lo que se te ocurra y decide después qué desarrollar.</p></div><button onClick={() => setShowIdeaForm(true)}><img src="/icons/ideas.webp" alt="" />＋ Nueva idea</button></div>
+            {showIdeaForm && <div className="newIdeaForm"><input autoFocus value={newIdea} onChange={(event) => setNewIdea(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && saveIdea()} placeholder="Escribe tu idea de negocio…" aria-label="Título de la nueva idea" /><button onClick={saveIdea}>Guardar</button><button className="cancel" onClick={() => setShowIdeaForm(false)}>Cancelar</button></div>}
+            <div className="ideaList">
+              {ideaItems.map((idea, index) => <article key={`${idea.title}-${index}`}><div className="ideaNumber">{String(index + 1).padStart(2, '0')}</div><div className="ideaCopy"><b>{idea.title}</b><p>{idea.detail}</p><div>{idea.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div><em>{idea.status}</em><button aria-label={`Ver detalles de ${idea.title}`}>›</button></article>)}
+            </div>
+          </section>
+        ) : active === 'Misiones' ? (
           <section className="levelsView" aria-label="Portadas de niveles">
             <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>40 portadas disponibles · recorrido completo</p></div>
             <div className="levelGrid">
@@ -156,14 +180,14 @@ export default function Home() {
 
             <section className="lower">
               <div className="today"><div className="sectionTitle"><b>HOY</b><span>Jueves, 27 de agosto</span></div><div className="habitGrid">{habits.map(([name, value, icon]) => <article className="habit" key={name}><img className="habitIcon" src={icon} alt="" /><div><small>{name}</small><b>{value}</b></div></article>)}</div></div>
-              <button className="ideaPanel" onClick={() => setIdeas(ideas + 1)} aria-label="Añadir una idea"><img src="/icons/ideas.webp" alt="" /><span><small>CREAR</small><b>＋ IDEA</b><em>{ideas} ideas guardadas</em></span></button>
+              <button className="ideaPanel" onClick={() => setActive('Ideas')} aria-label="Abrir panel de ideas"><img src="/icons/ideas.webp" alt="" /><span><small>CREAR</small><b>＋ IDEA</b><em>{ideaItems.length} ideas guardadas</em></span></button>
             </section>
           </>
         )}
 
         <nav className="nav" aria-label="Navegación principal">
-          {['Inicio', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Inicio' ? '⌂' : '◎'}</span>{item}</button>)}
-          <button className="homeButton" onClick={() => setActive('Inicio')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
+          {['Ideas', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '◎'}</span>{item}</button>)}
+          <button className={`homeButton ${active === 'HOME' ? 'active' : ''}`} onClick={() => setActive('HOME')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
           {['Actividades', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Actividades' ? '▦' : '♙'}</span>{item}</button>)}
         </nav>
       </section>
