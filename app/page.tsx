@@ -13,6 +13,16 @@ const levelNames = [
   'Más disciplina, más resultados',
   'Mejor apariencia, más confianza',
   'Primera gran etapa completada',
+  'Mejor tecnología, más oportunidades',
+  'Primer guardarropa bueno',
+  'Fitness visible',
+  'Primer smartphone premium',
+  'Primer estilo premium',
+  'Primer espacio realmente bonito',
+  'Primera escapada: viaje',
+  'Trabajo más profesional',
+  'Primer reloj de gama media',
+  'Departamento propio: independencia',
 ];
 
 const skills = [
@@ -38,7 +48,7 @@ export default function Home() {
   const cover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
 
   const chooseLevel = (next: number) => {
-    if (next > 10) return;
+    if (next > 20) return;
     setLevel(next);
     setActive('Inicio');
   };
@@ -53,11 +63,11 @@ export default function Home() {
 
         {active === 'Misiones' ? (
           <section className="levelsView" aria-label="Portadas de niveles">
-            <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>10 portadas disponibles · 30 por descubrir</p></div>
+            <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>20 portadas disponibles · 20 por descubrir</p></div>
             <div className="levelGrid">
               {Array.from({ length: 40 }, (_, index) => {
                 const number = index + 1;
-                const unlocked = number <= 10;
+                const unlocked = number <= 20;
                 return <button className={`levelCard ${unlocked ? '' : 'locked'} ${level === number ? 'selected' : ''}`} onClick={() => chooseLevel(number)} disabled={!unlocked} key={number} aria-label={unlocked ? `Abrir nivel ${number}: ${levelNames[index]}` : `Nivel ${number} bloqueado`}>
                   {unlocked && <img src={`/levels/level-${String(number).padStart(2, '0')}.webp`} alt="" />}
                   <span>{unlocked ? `NIVEL ${number}` : '🔒'}</span><b>{unlocked ? levelNames[index] : `Nivel ${number}`}</b>
@@ -71,7 +81,7 @@ export default function Home() {
               <div className="coverShade" />
               <button className="coverArrow left" onClick={() => setLevel(Math.max(1, level - 1))} disabled={level === 1} aria-label="Nivel anterior">‹</button>
               <div className="coverInfo"><span>NIVEL {level} DE 40</span><b>{levelNames[level - 1]}</b></div>
-              <button className="coverArrow right" onClick={() => setLevel(Math.min(10, level + 1))} disabled={level === 10} aria-label="Nivel siguiente">›</button>
+              <button className="coverArrow right" onClick={() => setLevel(Math.min(20, level + 1))} disabled={level === 20} aria-label="Nivel siguiente">›</button>
             </section>
 
             <section className="skills" aria-label="Habilidades">
