@@ -23,6 +23,26 @@ const levelNames = [
   'Trabajo más profesional',
   'Primer reloj de gama media',
   'Departamento propio: independencia',
+  'Primer coche propio',
+  'Mejor guardarropa y accesorios',
+  'Oficina personal: primera oficina',
+  'Primer coche premium',
+  'Departamento premium',
+  'Departamento premium renovado',
+  'Ecosistema tecnológico premium',
+  'Coche deportivo de entrada',
+  'Equipo y oficina en crecimiento',
+  'Vida premium nocturna',
+  'Patrimonio en movimiento',
+  'Penthouse y exclusividad',
+  'Penthouse en Cancún',
+  'Viaje premium a París',
+  'Experiencias gastronómicas premium',
+  'Empresa e inversiones',
+  'Casa familiar premium',
+  'Patrimonio internacional',
+  'Club y conexiones',
+  'Vida extraordinaria',
 ];
 
 const skills = [
@@ -44,12 +64,15 @@ const habits = [
 export default function Home() {
   const [active, setActive] = useState('Inicio');
   const [level, setLevel] = useState(1);
+  const [completed, setCompleted] = useState(false);
   const [ideas, setIdeas] = useState(12);
-  const cover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
+  const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
+  const cover = completed ? '/levels/victory.webp' : levelCover;
 
   const chooseLevel = (next: number) => {
-    if (next > 20) return;
+    if (next > 40) return;
     setLevel(next);
+    setCompleted(false);
     setActive('Inicio');
   };
 
@@ -57,17 +80,17 @@ export default function Home() {
     <main className="stage">
       <section className="dashboard" aria-label="Panel de progreso personal">
         <header className="topbar">
-          <div className="profile"><div className="avatar" style={{ backgroundImage: `url(${cover})` }} role="img" aria-label={`Personaje del nivel ${level}`} /><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
+          <div className="profile"><div className="avatar" style={{ backgroundImage: `url(${levelCover})` }} role="img" aria-label={`Personaje del nivel ${level}`} /><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
           <div className="topStats"><div><b>XP</b><strong>2,450</strong></div><div><b>Monedas</b><strong>3,800</strong></div></div>
         </header>
 
         {active === 'Misiones' ? (
           <section className="levelsView" aria-label="Portadas de niveles">
-            <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>20 portadas disponibles · 20 por descubrir</p></div>
+            <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>40 portadas disponibles · recorrido completo</p></div>
             <div className="levelGrid">
               {Array.from({ length: 40 }, (_, index) => {
                 const number = index + 1;
-                const unlocked = number <= 20;
+                const unlocked = number <= 40;
                 return <button className={`levelCard ${unlocked ? '' : 'locked'} ${level === number ? 'selected' : ''}`} onClick={() => chooseLevel(number)} disabled={!unlocked} key={number} aria-label={unlocked ? `Abrir nivel ${number}: ${levelNames[index]}` : `Nivel ${number} bloqueado`}>
                   {unlocked && <img src={`/levels/level-${String(number).padStart(2, '0')}.webp`} alt="" />}
                   <span>{unlocked ? `NIVEL ${number}` : '🔒'}</span><b>{unlocked ? levelNames[index] : `Nivel ${number}`}</b>
@@ -77,11 +100,11 @@ export default function Home() {
           </section>
         ) : (
           <>
-            <section className="hero coverHero" style={{ backgroundImage: `url(${cover})` }} aria-label={`Portada del nivel ${level}: ${levelNames[level - 1]}`}>
+            <section className="hero coverHero" style={{ backgroundImage: `url(${cover})` }} aria-label={completed ? 'Pantalla final del recorrido' : `Portada del nivel ${level}: ${levelNames[level - 1]}`}>
               <div className="coverShade" />
-              <button className="coverArrow left" onClick={() => setLevel(Math.max(1, level - 1))} disabled={level === 1} aria-label="Nivel anterior">‹</button>
-              <div className="coverInfo"><span>NIVEL {level} DE 40</span><b>{levelNames[level - 1]}</b></div>
-              <button className="coverArrow right" onClick={() => setLevel(Math.min(20, level + 1))} disabled={level === 20} aria-label="Nivel siguiente">›</button>
+              <button className="coverArrow left" onClick={() => completed ? setCompleted(false) : setLevel(Math.max(1, level - 1))} disabled={level === 1 && !completed} aria-label={completed ? 'Volver al nivel 40' : 'Nivel anterior'}>‹</button>
+              <div className="coverInfo"><span>{completed ? 'RECORRIDO COMPLETADO' : `NIVEL ${level} DE 40`}</span><b>{completed ? 'Felicidades, has ganado en la vida' : levelNames[level - 1]}</b></div>
+              <button className="coverArrow right" onClick={() => level === 40 ? setCompleted(true) : setLevel(level + 1)} disabled={completed} aria-label={level === 40 ? 'Ver final' : 'Nivel siguiente'}>›</button>
             </section>
 
             <section className="skills" aria-label="Habilidades">
