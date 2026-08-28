@@ -13,8 +13,20 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://daniel-os-panel.dani-estrada-figue.chatgpt.site'),
   title: 'Daniel OS — Panel personal',
   description: 'Panel gamificado de progreso, hábitos y objetivos personales.',
+  openGraph: {
+    title: 'Daniel OS',
+    description: 'Convierte tu progreso en experiencia.',
+    images: ['/og.png'],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Daniel OS',
+    description: 'Convierte tu progreso en experiencia.',
+    images: ['/og.png'],
+  },
 };
 
 export default function RootLayout({
