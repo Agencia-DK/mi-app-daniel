@@ -81,6 +81,15 @@ const pendingActivities = [
 const weekProgress = [65, 80, 55, 90, 72, 45, 30];
 const habitXp = [['5', 'Sencillo'], ['10', 'Medio'], ['15', 'Difícil'], ['25', 'Me cuesta (GYM)']];
 const taskXp = [['0', 'Delegada'], ['5', 'Baja'], ['20', 'Intermedia'], ['40', 'Media'], ['55', 'Difícil'], ['70', 'Máximo']];
+const reminderCategories = ['Compras', 'Hogar', 'Trabajo', 'Negocio', 'Personal', 'Estudio'];
+const initialReminders = [
+  ['Comprar escritorio', 'Comparar opciones', 'Compras'],
+  ['Cotizar aire acondicionado', 'Revisar precios', 'Hogar'],
+  ['Investigar laptop nueva', 'Elegir especificaciones', 'Trabajo'],
+  ['Terminar página de ventas', 'Revisar textos', 'Negocio'],
+  ['Planear viaje a CDMX', 'Elegir fechas', 'Personal'],
+  ['Aprender edición avanzada', 'Buscar un curso', 'Estudio'],
+];
 
 const initialIdeas = [
   { title: 'Agencia de contenido con IA', detail: 'Servicio mensual para negocios locales', tags: ['IA', 'Marketing'], status: 'Explorando' },
@@ -100,10 +109,13 @@ export default function Home() {
   const [doneTasks, setDoneTasks] = useState([1]);
   const [activityItems, setActivityItems] = useState(dailyActivities);
   const [taskItems, setTaskItems] = useState(pendingActivities);
-  const [modalType, setModalType] = useState<'habit' | 'task' | null>(null);
+  const [reminderItems, setReminderItems] = useState(initialReminders);
+  const [doneReminders, setDoneReminders] = useState<number[]>([]);
+  const [modalType, setModalType] = useState<'habit' | 'task' | 'reminder' | null>(null);
   const [itemName, setItemName] = useState('');
   const [itemDescription, setItemDescription] = useState('');
   const [itemXp, setItemXp] = useState('5');
+  const [itemCategory, setItemCategory] = useState('Compras');
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
@@ -133,16 +145,17 @@ export default function Home() {
 
   const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
   const toggleTask = (index: number) => setDoneTasks((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
-  const openItemModal = (type: 'habit' | 'task') => { setModalType(type); setItemName(''); setItemDescription(''); setItemXp(type === 'habit' ? '5' : '0'); };
+  const toggleReminder = (index: number) => setDoneReminders((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
+  const openItemModal = (type: 'habit' | 'task' | 'reminder') => { setModalType(type); setItemName(''); setItemDescription(''); setItemXp(type === 'habit' ? '5' : '0'); setItemCategory('Compras'); };
   const saveItem = () => {
     const name = itemName.trim();
     if (!name || !modalType) return;
     const description = itemDescription.trim() || 'Sin descripción';
     if (modalType === 'habit') setActivityItems((current) => [...current, [name, description, '/icons/habits.webp', `+${itemXp} XP`]]);
-    else {
+    else if (modalType === 'task') {
       const difficulty = taskXp.find(([xp]) => xp === itemXp)?.[1] || 'Delegada';
       setTaskItems((current) => [...current, [name, description, difficulty, `+${itemXp} XP`]]);
-    }
+    } else setReminderItems((current) => [...current, [name, description, itemCategory]]);
     setModalType(null);
   };
   const saveIdea = () => {
@@ -201,6 +214,7 @@ export default function Home() {
               <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><div className="boxActions"><strong>{doneTasks.length}/{taskItems.length}</strong><button onClick={() => openItemModal('task')}>＋ Agregar tarea</button></div></header><div className="pendingList">{taskItems.map(([name, description, difficulty, xp], index) => <button className={doneTasks.includes(index) ? 'done' : ''} onClick={() => toggleTask(index)} key={`${name}-${index}`}><i>{doneTasks.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><span className="taskMeta"><em className={`priority ${difficulty.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`}>{difficulty}</em><small>{xp}</small></span></button>)}</div></article>
               <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div><button>Ver detalles →</button></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{earnedXp}</b><i><em style={{width:`${Math.min(earnedXp / 3, 100)}%`}} /></i><small>{earnedXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
               <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><strong>{completion}%</strong></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={index === calendar.todayIndex ? 'todayBar' : ''} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
+              <article className="activityBox generalBox"><header><div><b>▰ Pendientes generales</b><small>Ideas, compras y recordatorios sin fecha · sin XP ni monedas</small></div><button onClick={() => openItemModal('reminder')}>＋ Agregar</button></header><div className="reminderList">{reminderItems.map(([name, description, category], index) => <button className={doneReminders.includes(index) ? 'done' : ''} onClick={() => toggleReminder(index)} key={`${name}-${index}`}><i>{doneReminders.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><em className={`reminderTag ${category.toLowerCase()}`}>{category}</em><strong>⋮</strong></button>)}</div></article>
             </div>
           </section>
         ) : (
@@ -223,7 +237,7 @@ export default function Home() {
           </>
         )}
 
-        {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar tarea pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : 'NUEVA TAREA'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label><fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset><button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : 'tarea'}</button></section></div>}
+        {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : modalType === 'task' ? 'NUEVA TAREA' : 'NUEVO RECORDATORIO'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : modalType === 'task' ? 'Agregar pendiente' : 'Pendiente general'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label>{modalType === 'reminder' ? <fieldset><legend>Categoría</legend><div className="categoryOptions">{reminderCategories.map((category) => <button className={itemCategory === category ? 'selected' : ''} onClick={() => setItemCategory(category)} key={category}>{category}</button>)}</div><p className="noReward">Este recordatorio no otorga XP ni monedas.</p></fieldset> : <fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset>}<button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : modalType === 'task' ? 'tarea' : 'recordatorio'}</button></section></div>}
 
         <nav className="nav" aria-label="Navegación principal">
           {['Ideas', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '◎'}</span>{item}</button>)}
