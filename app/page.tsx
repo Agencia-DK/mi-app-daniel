@@ -61,11 +61,31 @@ const habits = [
   ['Ejercicio', '45m', '/icons/exercise.webp'],
 ];
 
+const dailyActivities = [
+  ['Tomar agua', '2 litros', '/icons/health.webp', '+20 XP'],
+  ['Entrenamiento', '45 minutos', '/icons/exercise.webp', '+50 XP'],
+  ['Estudiar', '1 hora', '/icons/study.webp', '+40 XP'],
+  ['Trabajo profundo', '2 horas', '/icons/work.webp', '+70 XP'],
+  ['Revisar finanzas', '15 minutos', '/icons/finance.webp', '+25 XP'],
+  ['Planear mañana', '10 minutos', '/icons/discipline.webp', '+20 XP'],
+];
+
+const pendingActivities = [
+  ['Terminar propuesta', 'Trabajo', 'Alta'],
+  ['Revisar campaña', 'Negocios', 'Alta'],
+  ['Responder mensajes', 'Personal', 'Media'],
+  ['Preparar contenido', 'Estudio', 'Media'],
+  ['Organizar escritorio', 'Hábitos', 'Baja'],
+];
+
+const weekProgress = [65, 80, 55, 90, 72, 45, 30];
+
 export default function Home() {
   const [active, setActive] = useState('Inicio');
   const [level, setLevel] = useState(1);
   const [completed, setCompleted] = useState(false);
   const [ideas, setIdeas] = useState(12);
+  const [doneActivities, setDoneActivities] = useState([0, 2, 4]);
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
   const levelTier = level >= 30 ? 'gold' : level >= 15 ? 'silver' : 'bronze';
@@ -77,6 +97,8 @@ export default function Home() {
     setCompleted(false);
     setActive('Inicio');
   };
+
+  const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
 
   return (
     <main className="stage">
@@ -104,6 +126,21 @@ export default function Home() {
               })}
             </div>
           </section>
+        ) : active === 'Actividades' ? (
+          <section className="activitiesView" aria-label="Panel de actividades">
+            <div className="activitiesHeading"><div><span>HOY · 28 DE AGOSTO</span><h1>Actividades</h1><p>Pequeñas acciones, grandes resultados.</p></div><div className="dailyScore"><b>{doneActivities.length}/{dailyActivities.length}</b><span>completadas</span></div></div>
+            <div className="activitySummary">
+              <article><img src="/icons/streak.webp" alt="" /><span><small>Racha</small><b>28 días</b></span></article>
+              <article><img src="/icons/xp.webp" alt="" /><span><small>XP de hoy</small><b>+420</b></span></article>
+              <article><img src="/icons/habits.webp" alt="" /><span><small>Objetivo diario</small><b>{Math.round(doneActivities.length / dailyActivities.length * 100)}%</b></span></article>
+              <article><img src="/icons/pending.webp" alt="" /><span><small>Pendientes</small><b>5 activos</b></span></article>
+            </div>
+            <div className="activityBoard">
+              <article className="activityBox habitsBox"><header><div><b>Hábitos de hoy</b><small>Marca lo que vayas completando</small></div><strong>{doneActivities.length}/{dailyActivities.length}</strong></header><div className="activityList">{dailyActivities.map(([name, detail, icon, xp], index) => <button className={doneActivities.includes(index) ? 'done' : ''} onClick={() => toggleActivity(index)} key={name}><i>{doneActivities.includes(index) ? '✓' : ''}</i><img src={icon} alt="" /><span><b>{name}</b><small>{detail}</small></span><em>{xp}</em></button>)}</div></article>
+              <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><strong>5</strong></header><div className="pendingList">{pendingActivities.map(([name, category, priority]) => <div key={name}><i /><span><b>{name}</b><small>{category}</small></span><em className={`priority ${priority.toLowerCase()}`}>{priority}</em></div>)}</div></article>
+              <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>Tu constancia día a día</small></div><strong>72%</strong></header><div className="weekChart">{weekProgress.map((value, index) => <div key={index}><span><i style={{ height: `${value}%` }} /></span><b>{['L','M','X','J','V','S','D'][index]}</b></div>)}</div></article>
+            </div>
+          </section>
         ) : (
           <>
             <section className="hero coverHero" style={{ backgroundImage: `url(${cover})` }} aria-label={completed ? 'Pantalla final del recorrido' : `Portada del nivel ${level}: ${levelNames[level - 1]}`}>
@@ -127,7 +164,7 @@ export default function Home() {
         <nav className="nav" aria-label="Navegación principal">
           {['Inicio', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Inicio' ? '⌂' : '◎'}</span>{item}</button>)}
           <button className="homeButton" onClick={() => setActive('Inicio')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
-          {['Progreso', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Progreso' ? '▥' : '♙'}</span>{item}</button>)}
+          {['Actividades', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Actividades' ? '▦' : '♙'}</span>{item}</button>)}
         </nav>
       </section>
     </main>
