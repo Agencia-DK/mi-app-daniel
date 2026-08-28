@@ -166,6 +166,14 @@ export default function Home() {
     setShowIdeaForm(false);
   };
 
+  const nextLevel = Math.min(level + 1, 40);
+  const profileRequirements = [
+    { icon: '✦', label: 'XP', current: '2,450', target: '3,500', progress: 70, tone: 'purple' },
+    { icon: '$', label: 'Patrimonio', current: '$800,000', target: '$1,000,000', progress: 80, tone: 'green' },
+    { icon: '↗', label: 'Ingreso mensual', current: '$75,000', target: '$70,000', progress: 100, tone: 'blue' },
+    { icon: '◈', label: 'Estabilidad', current: '80%', target: '70%', progress: 100, tone: 'orange' },
+  ];
+
   return (
     <main className="stage">
       <section className="dashboard" aria-label="Panel de progreso personal">
@@ -215,6 +223,19 @@ export default function Home() {
               <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div><button>Ver detalles →</button></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{earnedXp}</b><i><em style={{width:`${Math.min(earnedXp / 3, 100)}%`}} /></i><small>{earnedXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
               <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><strong>{completion}%</strong></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={index === calendar.todayIndex ? 'todayBar' : ''} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
               <article className="activityBox generalBox"><header><div><b>▰ Pendientes generales</b><small>Ideas, compras y recordatorios sin fecha · sin XP ni monedas</small></div><button onClick={() => openItemModal('reminder')}>＋ Agregar</button></header><div className="reminderList">{reminderItems.map(([name, description, category], index) => <button className={doneReminders.includes(index) ? 'done' : ''} onClick={() => toggleReminder(index)} key={`${name}-${index}`}><i>{doneReminders.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><em className={`reminderTag ${category.toLowerCase()}`}>{category}</em><strong>⋮</strong></button>)}</div></article>
+            </div>
+          </section>
+        ) : active === 'Perfil' ? (
+          <section className="profileView" aria-label="Perfil y requisitos del siguiente nivel">
+            <div className="profileHeading"><div><span>♕ MI NIVEL</span><h1>Tu siguiente etapa</h1><p>Completa los requisitos para desbloquear el próximo nivel.</p></div><div className={`profileMedal ${levelTier}`}><small>NIVEL</small><b>{level}</b></div></div>
+            <article className="levelUnlockCard">
+              <div className="unlockGlow" aria-hidden="true">◇</div>
+              <header><span>⌃ SIGUIENTE NIVEL</span><h2>NIVEL {level} <em>→</em> NIVEL {nextLevel}</h2></header>
+              <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
+            </article>
+            <div className="profileBottom">
+              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>$200,000 de patrimonio</b></p><p><i>✦</i><b>1,050 XP</b></p></article>
+              <article className="rewardCard"><span>AL COMPLETAR TODOS LOS REQUISITOS</span><b>♕</b><h3>NIVEL DESBLOQUEADO</h3><p>Tu progreso queda guardado para siempre.</p><small>▣ Nivel guardado permanentemente</small></article>
             </div>
           </section>
         ) : (
