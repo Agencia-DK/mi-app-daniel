@@ -97,6 +97,7 @@ export default function Home() {
   const [newIdea, setNewIdea] = useState('');
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [doneActivities, setDoneActivities] = useState([0, 2, 4]);
+  const [doneTasks, setDoneTasks] = useState([1]);
   const [activityItems, setActivityItems] = useState(dailyActivities);
   const [taskItems, setTaskItems] = useState(pendingActivities);
   const [modalType, setModalType] = useState<'habit' | 'task' | null>(null);
@@ -109,6 +110,9 @@ export default function Home() {
   const levelTier = level >= 30 ? 'gold' : level >= 15 ? 'silver' : 'bronze';
   const levelTierLabel = level >= 30 ? 'oro' : level >= 15 ? 'plata' : 'bronce';
   const completion = activityItems.length ? Math.round(doneActivities.length / activityItems.length * 100) : 0;
+  const taskCompletion = taskItems.length ? Math.round(doneTasks.length / taskItems.length * 100) : 0;
+  const earnedXp = doneActivities.reduce((total, index) => total + Number(activityItems[index]?.[3].replace(/\D/g, '') || 0), 0) + doneTasks.reduce((total, index) => total + Number(taskItems[index]?.[3].replace(/\D/g, '') || 0), 0);
+  const dayCompletion = Math.round((completion + taskCompletion) / 2);
   const liveWeekProgress = weekProgress.map((value, index) => index === calendar.todayIndex ? completion : value);
 
   useEffect(() => {
@@ -128,6 +132,7 @@ export default function Home() {
   };
 
   const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
+  const toggleTask = (index: number) => setDoneTasks((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
   const openItemModal = (type: 'habit' | 'task') => { setModalType(type); setItemName(''); setItemDescription(''); setItemXp(type === 'habit' ? '5' : '0'); };
   const saveItem = () => {
     const name = itemName.trim();
@@ -193,7 +198,8 @@ export default function Home() {
             </div>
             <div className="activityBoard">
               <article className="activityBox habitsBox"><header><div><b>Hábitos de hoy</b><small>Marca lo que vayas completando</small></div><div className="boxActions"><strong>{doneActivities.length}/{activityItems.length}</strong><button onClick={() => openItemModal('habit')}>＋ Agregar hábito</button></div></header><div className="activityList">{activityItems.map(([name, detail, icon, xp], index) => <button className={doneActivities.includes(index) ? 'done' : ''} onClick={() => toggleActivity(index)} key={`${name}-${index}`}><i>{doneActivities.includes(index) ? '✓' : ''}</i><img src={icon} alt="" /><span><b>{name}</b><small>{detail}</small></span><em>{xp}</em></button>)}</div></article>
-              <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><div className="boxActions"><strong>{taskItems.length}</strong><button onClick={() => openItemModal('task')}>＋ Agregar tarea</button></div></header><div className="pendingList">{taskItems.map(([name, description, difficulty, xp], index) => <div key={`${name}-${index}`}><i /><span><b>{name}</b><small>{description}</small></span><span className="taskMeta"><em className={`priority ${difficulty.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`}>{difficulty}</em><small>{xp}</small></span></div>)}</div></article>
+              <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><div className="boxActions"><strong>{doneTasks.length}/{taskItems.length}</strong><button onClick={() => openItemModal('task')}>＋ Agregar tarea</button></div></header><div className="pendingList">{taskItems.map(([name, description, difficulty, xp], index) => <button className={doneTasks.includes(index) ? 'done' : ''} onClick={() => toggleTask(index)} key={`${name}-${index}`}><i>{doneTasks.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><span className="taskMeta"><em className={`priority ${difficulty.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`}>{difficulty}</em><small>{xp}</small></span></button>)}</div></article>
+              <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div><button>Ver detalles →</button></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{earnedXp}</b><i><em style={{width:`${Math.min(earnedXp / 3, 100)}%`}} /></i><small>{earnedXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
               <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><strong>{completion}%</strong></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={index === calendar.todayIndex ? 'todayBar' : ''} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
             </div>
           </section>
