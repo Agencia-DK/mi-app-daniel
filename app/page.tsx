@@ -46,19 +46,19 @@ const levelNames = [
 ];
 
 const skills = [
-  ['Finanzas', '1,870 / 2,500', '75%', '€'],
-  ['Conocimiento', '2,150 / 2,800', '77%', '▣'],
-  ['Salud', '1,920 / 2,600', '74%', '♥'],
-  ['Disciplina', '2,400 / 2,900', '83%', '◷'],
-  ['Negocios', '1,600 / 2,300', '70%', '◆'],
+  ['Finanzas', '1,870 / 2,500', '75%', '/icons/finance.webp'],
+  ['Conocimiento', '2,150 / 2,800', '77%', '/icons/knowledge.webp'],
+  ['Salud', '1,920 / 2,600', '74%', '/icons/health.webp'],
+  ['Disciplina', '2,400 / 2,900', '83%', '/icons/discipline.webp'],
+  ['Negocios', '1,600 / 2,300', '70%', '/icons/business.webp'],
 ];
 
 const habits = [
-  ['Hábitos', '6/8', '✓', 'green'],
-  ['Pendientes', '4/7', '!', 'amber'],
-  ['Estudio', '1h 20m', '▥', 'blue'],
-  ['Trabajo', '3h 40m', '✦', 'purple'],
-  ['Ejercicio', '45m', '⌁', 'green'],
+  ['Hábitos', '6/8', '/icons/habits.webp'],
+  ['Pendientes', '4/7', '/icons/pending.webp'],
+  ['Estudio', '1h 20m', '/icons/study.webp'],
+  ['Trabajo', '3h 40m', '/icons/work.webp'],
+  ['Ejercicio', '45m', '/icons/exercise.webp'],
 ];
 
 export default function Home() {
@@ -110,11 +110,11 @@ export default function Home() {
             </section>
 
             <section className="skills" aria-label="Habilidades">
-              {skills.map(([name, value, width, icon], index) => <article className="skill" key={name}><div><span className={`dot c${index}`}>{icon}</span>{name}<small>Nivel 2{index + 3}</small></div><div className="bar"><i style={{ width }} /></div><p>{value}</p></article>)}
+              {skills.map(([name, value, width, icon], index) => <article className="skill" key={name}><div><span className="dot"><img src={icon} alt="" /> </span>{name}<small>Nivel 2{index + 3}</small></div><div className="bar"><i style={{ width }} /></div><p>{value}</p></article>)}
             </section>
 
             <section className="lower">
-              <div className="today"><div className="sectionTitle"><b>HOY</b><span>Jueves, 27 de agosto</span></div><div className="habitGrid">{habits.map(([name, value, icon, color]) => <article className="habit" key={name}><span className={color}>{icon}</span><div><small>{name}</small><b>{value}</b></div></article>)}</div></div>
+              <div className="today"><div className="sectionTitle"><b>HOY</b><span>Jueves, 27 de agosto</span></div><div className="habitGrid">{habits.map(([name, value, icon]) => <article className="habit" key={name}><img className="habitIcon" src={icon} alt="" /><div><small>{name}</small><b>{value}</b></div></article>)}</div></div>
               <article className="mission"><div className="sectionTitle"><b>MISIÓN PRINCIPAL</b></div><h2>Convertirme en<br/>Creative Strategist</h2><div className="missionBody"><ul><li>Diseño visual</li><li>Psicología del consumidor</li></ul><div className="crystal">◆</div></div></article>
             </section>
           </>
