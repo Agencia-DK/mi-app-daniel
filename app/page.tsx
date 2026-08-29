@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { fullStudyBranches } from './study-data';
 
 const levelNames = [
   'El inicio',
@@ -131,7 +132,7 @@ const studyBranches: StudyBranch[] = [
 ];
 
 function StudyView() {
-  const [branches, setBranches] = useState(studyBranches);
+  const [branches, setBranches] = useState(fullStudyBranches);
   const [branchIndex, setBranchIndex] = useState<number | null>(null);
   const [topicIndex, setTopicIndex] = useState<number | null>(null);
   const [query, setQuery] = useState('');
@@ -142,14 +143,14 @@ function StudyView() {
 
   useEffect(() => {
     try {
-      const storedBranches = JSON.parse(localStorage.getItem('daniel-os-study') || 'null');
+      const storedBranches = JSON.parse(localStorage.getItem('daniel-os-study-v2') || 'null');
       const storedSaved = JSON.parse(localStorage.getItem('daniel-os-study-saved') || 'null');
       if (storedBranches) setBranches(storedBranches);
       if (storedSaved) setSaved(storedSaved);
     } catch { /* Keep the starter curriculum. */ }
     setStudyReady(true);
   }, []);
-  useEffect(() => { if (studyReady) localStorage.setItem('daniel-os-study', JSON.stringify(branches)); }, [branches, studyReady]);
+  useEffect(() => { if (studyReady) localStorage.setItem('daniel-os-study-v2', JSON.stringify(branches)); }, [branches, studyReady]);
   useEffect(() => { if (studyReady) localStorage.setItem('daniel-os-study-saved', JSON.stringify(saved)); }, [saved, studyReady]);
 
   const selectedBranch = branchIndex === null ? null : branches[branchIndex];
@@ -163,13 +164,16 @@ function StudyView() {
     if (branchIndex === null || topicIndex === null) return;
     setBranches((current) => current.map((branch, bi) => {
       if (bi !== branchIndex) return branch;
-      return { ...branch, topics: branch.topics.map((topic, ti) => {
+      let topics = branch.topics.map((topic, ti) => {
         if (ti !== topicIndex) return topic;
         const modules = topic.modules.map((module, mi) => mi !== moduleIndex ? module : { ...module, tasks: module.tasks.map((task, xi) => xi === taskIndex ? { ...task, done: !task.done } : task) });
         const tasks = modules.flatMap((module) => module.tasks);
         const progress = tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : topic.progress;
         return { ...topic, modules, progress };
-      }) };
+      });
+      topics = topics.map((topic, index) => ({ ...topic, locked: index > 0 && topics[index - 1].progress < 100 }));
+      const completedLevels = topics.filter((topic) => topic.progress === 100).length;
+      return { ...branch, topics, level: Math.min(topics.length, completedLevels + 1) };
     }));
   };
   const saveMaterial = () => {
