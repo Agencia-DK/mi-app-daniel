@@ -6,6 +6,7 @@ import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantXp, habitStrea
 import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from './config/levelConfig';
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
 import { skillLevel } from './config/skillConfig';
+import { REWARD_CONFIG } from './config/rewardConfig';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
@@ -183,7 +184,7 @@ export default function Home() {
   const [progression, setProgression] = useState<ProgressionState>(INITIAL_PROGRESSION);
   const [progressionReady, setProgressionReady] = useState(false);
   const [coverLevel, setCoverLevel] = useState(1);
-  const [, setKnowledgeTopics] = useState(0);
+  const [knowledgeTopics, setKnowledgeTopics] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [ideaItems, setIdeaItems] = useState(initialIdeas);
   const [newIdea, setNewIdea] = useState('');
@@ -214,6 +215,7 @@ export default function Home() {
   const [moneyConcept, setMoneyConcept] = useState('');
   const [moneyAmount, setMoneyAmount] = useState('');
   const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
+  const [unlockedLevel, setUnlockedLevel] = useState<number | null>(null);
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const level = progression.highestLevelUnlocked;
   const levelCover = `/levels/level-${String(coverLevel).padStart(2, '0')}.webp`;
@@ -263,6 +265,13 @@ export default function Home() {
     const dayLetters = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
     const days = dayLetters.map((day, index) => { const date = new Date(monday); date.setDate(monday.getDate() + index); return { day, date: String(date.getDate()) }; });
     setCalendar({ label: now.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' }), date: now.toLocaleDateString('es-MX', { weekday: 'long', day: 'numeric', month: 'long' }), todayIndex: (now.getDay() + 6) % 7, days });
+  }, []);
+
+  useEffect(() => {
+    try {
+      const savedStudy = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.study) || 'null') as StudyBranch[] | null;
+      if (savedStudy) setKnowledgeTopics(savedStudy.flatMap((branch) => branch.topics).filter((topic) => topic.progress === 100).length);
+    } catch { /* Keep knowledge progress at zero until valid local data exists. */ }
   }, []);
 
   useEffect(() => {
@@ -513,18 +522,33 @@ export default function Home() {
   const nextRequirement = requirementForLevel(nextLevel);
   const incomeAverageMonths = incomeAverageMonthsForLevel(nextLevel);
   const qualifyingNetIncome = averageNetIncome(incomeAverageMonths);
+  const bossRequirement = REWARD_CONFIG.bossLevels[nextLevel as keyof typeof REWARD_CONFIG.bossLevels];
   const profileRequirements = [
-    { icon: '✦', label: 'XP general', current: progression.generalXp.toLocaleString('es-MX'), target: nextRequirement.xp.toLocaleString('es-MX'), progress: percentage(progression.generalXp, nextRequirement.xp), tone: 'purple' },
-    { icon: '$', label: 'Patrimonio neto', current: formatMoney(totalWorth), target: formatMoney(nextRequirement.netWorth), progress: percentage(totalWorth, nextRequirement.netWorth), tone: 'green' },
-    { icon: '↗', label: `Ingreso neto · promedio ${incomeAverageMonths} meses`, current: formatMoney(qualifyingNetIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(qualifyingNetIncome, nextRequirement.netMonthlyIncome), tone: 'blue' },
-    { icon: '◈', label: 'Estabilidad', current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange' },
+    { icon: '✦', label: 'XP general', current: progression.generalXp.toLocaleString('es-MX'), target: nextRequirement.xp.toLocaleString('es-MX'), progress: percentage(progression.generalXp, nextRequirement.xp), tone: 'purple', missing: `${Math.max(0, nextRequirement.xp - progression.generalXp).toLocaleString('es-MX')} XP general` },
+    { icon: '$', label: 'Patrimonio neto', current: formatMoney(totalWorth), target: formatMoney(nextRequirement.netWorth), progress: percentage(totalWorth, nextRequirement.netWorth), tone: 'green', missing: `${formatMoney(Math.max(0, nextRequirement.netWorth - totalWorth))} de patrimonio` },
+    { icon: '↗', label: `Ingreso neto · promedio ${incomeAverageMonths} meses`, current: formatMoney(qualifyingNetIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(qualifyingNetIncome, nextRequirement.netMonthlyIncome), tone: 'blue', missing: `${formatMoney(Math.max(0, nextRequirement.netMonthlyIncome - qualifyingNetIncome))} de ingreso neto promedio` },
+    { icon: '◈', label: 'Estabilidad', current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange', missing: `${Math.max(0, nextRequirement.stability - stability)}% de estabilidad` },
+    ...(bossRequirement ? [{ icon: '♛', label: 'Requisito Boss Level', current: knowledgeTopics.toLocaleString('es-MX'), target: bossRequirement.completedKnowledgeTopics.toLocaleString('es-MX'), progress: percentage(knowledgeTopics, bossRequirement.completedKnowledgeTopics), tone: 'purple', missing: `${Math.max(0, bossRequirement.completedKnowledgeTopics - knowledgeTopics)} temas de conocimiento` }] : []),
   ];
+  const missingRequirements = level === GAME_CONFIG.maxLevel ? [] : profileRequirements.filter((item) => item.progress < 100);
   const canLevelUp = level < GAME_CONFIG.maxLevel && profileRequirements.every((item) => item.progress >= 100);
+  const recentXp = progression.xpHistory.slice(-5).reverse();
+  const nextFinancialMilestone = Object.entries(XP_CONFIG.financialMilestones).map(([target, reward]) => ({ target: Number(target), reward })).find((item) => item.target > totalWorth);
+  const nextStreakMilestone = Object.entries(XP_CONFIG.streaks).map(([target, reward]) => ({ target: Number(target), reward })).find((item) => item.target > progression.streak);
+  const nextBossLevel = Object.entries(REWARD_CONFIG.bossLevels).map(([bossLevel, requirement]) => ({ level: Number(bossLevel), ...requirement })).find((boss) => boss.level > level);
 
   useEffect(() => {
     if (!progressionReady || !canLevelUp) return;
-    setProgression((current) => { const unlocked = Math.min(GAME_CONFIG.maxLevel, current.highestLevelUnlocked + 1); return { ...current, level: unlocked, highestLevelUnlocked: unlocked }; });
+    const unlocked = Math.min(GAME_CONFIG.maxLevel, level + 1);
+    setProgression((current) => ({ ...current, level: unlocked, highestLevelUnlocked: Math.max(current.highestLevelUnlocked, unlocked) }));
+    setUnlockedLevel(unlocked);
   }, [progressionReady, canLevelUp, level]);
+
+  useEffect(() => {
+    if (!unlockedLevel) return;
+    const timer = window.setTimeout(() => setUnlockedLevel(null), 3500);
+    return () => window.clearTimeout(timer);
+  }, [unlockedLevel]);
 
   return (
     <main className="stage">
@@ -567,15 +591,21 @@ export default function Home() {
           </section>
         ) : active === 'Perfil' ? (
           <section className="profileView" aria-label="Perfil y requisitos del siguiente nivel">
-            <div className="profileHeading"><div><span>♕ MI NIVEL</span><h1>Tu siguiente etapa</h1><p>Completa los requisitos para desbloquear el próximo nivel.</p></div><div className={`profileMedal ${levelTier}`}><small>NIVEL</small><b>{level}</b></div></div>
+            <div className="profileHeading"><div><span>♕ MI NIVEL</span><h1>Nivel actual</h1><p>{LEVEL_NAMES[level - 1]} · {progression.generalXp.toLocaleString('es-MX')} XP total</p></div><div className={`profileMedal ${levelTier}`}><small>NIVEL</small><b>{level}</b></div></div>
             <article className="levelUnlockCard">
               <div className="unlockGlow" aria-hidden="true">◇</div>
-              <header><span>⌃ SIGUIENTE NIVEL</span><h2>NIVEL {level} <em>→</em> NIVEL {nextLevel}</h2></header>
-              <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
+              <div className="profileCharacter"><img src={`/levels/level-${String(level).padStart(2, '0')}.webp`} alt={`Personaje correspondiente al nivel ${level}`} /><span><small>NIVEL ACTUAL</small><b>NIVEL {level}</b><em>{progression.generalXp.toLocaleString('es-MX')} XP TOTAL</em></span></div>
+              <header><span>⌃ {level === GAME_CONFIG.maxLevel ? 'NIVEL MÁXIMO' : 'SIGUIENTE NIVEL'}</span><h2>{level === GAME_CONFIG.maxLevel ? 'NIVEL 40 · COMPLETADO' : <>NIVEL {level} <em>→</em> NIVEL {nextLevel}</>}</h2></header>
+              <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓ COMPLETADO</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
             </article>
             <div className="profileBottom">
-              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>{formatMoney(Math.max(0, nextRequirement.netWorth - totalWorth))} de patrimonio</b></p><p><i>✦</i><b>{Math.max(0, nextRequirement.xp - progression.generalXp).toLocaleString('es-MX')} XP general</b></p></article>
-              <article className="rewardCard"><span>AL COMPLETAR TODOS LOS REQUISITOS</span><b>♕</b><h3>NIVEL DESBLOQUEADO</h3><p>Tu progreso queda guardado para siempre.</p><small>▣ Nivel guardado permanentemente</small></article>
+              <article className="missingCard"><span>{missingRequirements.length ? 'TE FALTA:' : '✓ COMPLETADO'}</span>{missingRequirements.length ? missingRequirements.map((item) => <p key={item.label}><i>{item.icon}</i><b>{item.missing}</b></p>) : <p><i>✓</i><b>Todos los requisitos están completos</b></p>}</article>
+              <article className={`rewardCard ${unlockedLevel ? 'unlocking' : ''}`}><span>{unlockedLevel ? `NIVEL ${unlockedLevel} DESBLOQUEADO` : 'AL COMPLETAR TODOS LOS REQUISITOS'}</span><b>♕</b><h3>{level === GAME_CONFIG.maxLevel ? 'NIVEL MÁXIMO' : 'NIVEL DESBLOQUEADO'}</h3><p>Tu progreso queda guardado para siempre.</p><small>▣ Nivel guardado permanentemente</small></article>
+            </div>
+            <div className="levelInsights">
+              <article><header><b>✦ XP GANADO RECIENTEMENTE</b></header>{recentXp.length ? recentXp.map((entry) => <p key={`${entry.id}-${entry.date}`}><span><b>{entry.reason}</b><small>{entry.date}{entry.skill ? ` · ${entry.skill}` : ''}</small></span><strong className={entry.amount < 0 ? 'negative' : ''}>{entry.amount > 0 ? '+' : ''}{entry.amount} XP</strong></p>) : <p className="emptyInsight">Aún no hay movimientos de XP.</p>}</article>
+              <article><header><b>◇ PRÓXIMOS HITOS</b></header>{level < GAME_CONFIG.maxLevel && <p><span><b>Nivel {nextLevel}</b><small>{nextRequirement.xp.toLocaleString('es-MX')} XP total</small></span><strong>{Math.min(100, percentage(progression.generalXp, nextRequirement.xp))}%</strong></p>}{nextFinancialMilestone && <p><span><b>{formatMoney(nextFinancialMilestone.target)} de patrimonio</b><small>Recompensa única</small></span><strong>+{nextFinancialMilestone.reward.toLocaleString('es-MX')} XP</strong></p>}{nextStreakMilestone && <p><span><b>Racha de {nextStreakMilestone.target} días</b><small>Mínimo 60–70% de hábitos</small></span><strong>+{nextStreakMilestone.reward.toLocaleString('es-MX')} XP</strong></p>}</article>
+              <article className="bossInsight"><header><b>♛ BOSS LEVEL PRÓXIMO</b></header>{nextBossLevel ? <><strong>NIVEL {nextBossLevel.level}</strong><p><span><b>{nextBossLevel.label}</b><small>{knowledgeTopics} / {nextBossLevel.completedKnowledgeTopics} temas completados</small></span><mark>{percentage(knowledgeTopics, nextBossLevel.completedKnowledgeTopics)}%</mark></p></> : <p className="emptyInsight">Todos los Boss Levels fueron superados.</p>}</article>
             </div>
             <section className="moneyPanel" aria-label="Resumen de dinero y patrimonio">
               <header><div><span>▱</span><h2>MI DINERO</h2><p>Resumen simple de tu dinero y patrimonio.</p></div><b>♨</b></header>
