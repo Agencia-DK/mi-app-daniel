@@ -7,6 +7,7 @@ import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from '.
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
 import { skillLevel } from './config/skillConfig';
 import { REWARD_CONFIG } from './config/rewardConfig';
+import { STABILITY_CONFIG, financialStability, stabilityClassification, stabilityWindowDaysForLevel } from './config/stabilityConfig';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
@@ -247,16 +248,22 @@ export default function Home() {
   const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(now.getFullYear()))).reduce((sum, item) => sum + item.amount, 0);
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${now.getFullYear()}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
   const chartMax = Math.max(1, ...monthlyChart);
-  const healthActivityIndexes = activityItems.map((item, index) => ({ item, index })).filter(({ item }) => /agua|entren|ejercicio|salud|gym/i.test(item[0])).map(({ index }) => index);
+  const targetLevelForStability = Math.min(level + 1, GAME_CONFIG.maxLevel);
+  const stabilityIncomeTarget = requirementForLevel(targetLevelForStability).netMonthlyIncome;
+  const importantTaskIndexes = taskItems.map((item, index) => ({ item, index })).filter(({ item }) => xpFromLabel(item[3]) >= 20).map(({ index }) => index);
+  const priorityCompletion = percentage(importantTaskIndexes.filter((index) => doneTasks.includes(index)).length, importantTaskIndexes.length);
+  const healthActivityIndexes = activityItems.map((item, index) => ({ item, index })).filter(({ item }) => STABILITY_CONFIG.healthPattern.test(`${item[0]} ${item[1]}`)).map(({ index }) => index);
   const healthCompletion = percentage(healthActivityIndexes.filter((index) => doneActivities.includes(index)).length, healthActivityIndexes.length);
   const todayStability = {
     habits: completion,
-    productivity: taskCompletion,
-    finances: monthlyTransactions.length ? (netMonthlyIncome >= 0 ? 100 : 0) : 0,
+    productivity: priorityCompletion,
+    finances: monthlyTransactions.length ? financialStability(netMonthlyIncome, monthlyIncome, monthlyExpense, stabilityIncomeTarget) : 0,
     health: healthCompletion,
-    learning: (progression.learningByDay[dayKey()] || 0) > 0 ? 100 : 0,
+    learning: percentage(progression.learningByDay[dayKey()] || 0, STABILITY_CONFIG.learningDailyTarget),
   };
-  const stability = averageStability({ ...progression.stabilityByDay, [dayKey()]: todayStability }, now);
+  const stabilityWindowDays = stabilityWindowDaysForLevel(targetLevelForStability);
+  const stability = averageStability({ ...progression.stabilityByDay, [dayKey()]: todayStability }, now, stabilityWindowDays);
+  const stabilityLabel = stabilityClassification(stability);
 
   useEffect(() => {
     const now = new Date();
@@ -527,7 +534,7 @@ export default function Home() {
     { icon: '✦', label: 'XP general', current: progression.generalXp.toLocaleString('es-MX'), target: nextRequirement.xp.toLocaleString('es-MX'), progress: percentage(progression.generalXp, nextRequirement.xp), tone: 'purple', missing: `${Math.max(0, nextRequirement.xp - progression.generalXp).toLocaleString('es-MX')} XP general` },
     { icon: '$', label: 'Patrimonio neto', current: formatMoney(totalWorth), target: formatMoney(nextRequirement.netWorth), progress: percentage(totalWorth, nextRequirement.netWorth), tone: 'green', missing: `${formatMoney(Math.max(0, nextRequirement.netWorth - totalWorth))} de patrimonio` },
     { icon: '↗', label: `Ingreso neto · promedio ${incomeAverageMonths} meses`, current: formatMoney(qualifyingNetIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(qualifyingNetIncome, nextRequirement.netMonthlyIncome), tone: 'blue', missing: `${formatMoney(Math.max(0, nextRequirement.netMonthlyIncome - qualifyingNetIncome))} de ingreso neto promedio` },
-    { icon: '◈', label: 'Estabilidad', current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange', missing: `${Math.max(0, nextRequirement.stability - stability)}% de estabilidad` },
+    { icon: '◈', label: `Estabilidad · ${stabilityLabel} · ${stabilityWindowDays} días`, current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange', missing: `${Math.max(0, nextRequirement.stability - stability)}% de estabilidad` },
     ...(bossRequirement ? [{ icon: '♛', label: 'Requisito Boss Level', current: knowledgeTopics.toLocaleString('es-MX'), target: bossRequirement.completedKnowledgeTopics.toLocaleString('es-MX'), progress: percentage(knowledgeTopics, bossRequirement.completedKnowledgeTopics), tone: 'purple', missing: `${Math.max(0, bossRequirement.completedKnowledgeTopics - knowledgeTopics)} temas de conocimiento` }] : []),
   ];
   const missingRequirements = level === GAME_CONFIG.maxLevel ? [] : profileRequirements.filter((item) => item.progress < 100);
