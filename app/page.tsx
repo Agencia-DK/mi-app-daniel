@@ -3,6 +3,11 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fullStudyBranches } from './study-data';
 
+type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
+type MoneyAsset = { id: number; name: string; detail: string; value: number };
+type MoneyModal = 'income' | 'expense' | 'balance' | 'asset' | 'transactions' | 'assets' | null;
+const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+
 const levelNames = [
   'El inicio',
   'Pequeños hábitos, grandes cambios',
@@ -232,6 +237,13 @@ export default function Home() {
   const [itemCategory, setItemCategory] = useState('Compras');
   const [habitToDelete, setHabitToDelete] = useState<number | null>(null);
   const [storageReady, setStorageReady] = useState(false);
+  const [moneyReady, setMoneyReady] = useState(false);
+  const [cash, setCash] = useState(0);
+  const [moneyTransactions, setMoneyTransactions] = useState<MoneyTransaction[]>([]);
+  const [moneyAssets, setMoneyAssets] = useState<MoneyAsset[]>([]);
+  const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
+  const [moneyConcept, setMoneyConcept] = useState('');
+  const [moneyAmount, setMoneyAmount] = useState('');
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
@@ -245,6 +257,16 @@ export default function Home() {
   const monthCalendar = buildMonth(historyMonth);
   const monthLabel = historyMonth.toLocaleDateString('es-MX', { month: 'long', year: 'numeric' });
   const isCurrentMonth = historyMonth.getFullYear() === new Date().getFullYear() && historyMonth.getMonth() === new Date().getMonth();
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const monthlyTransactions = moneyTransactions.filter((item) => item.date.startsWith(currentMonth));
+  const monthlyIncome = monthlyTransactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0);
+  const monthlyExpense = monthlyTransactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0);
+  const assetsTotal = moneyAssets.reduce((sum, item) => sum + item.value, 0);
+  const totalWorth = cash + assetsTotal;
+  const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(now.getFullYear()))).reduce((sum, item) => sum + item.amount, 0);
+  const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${now.getFullYear()}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
+  const chartMax = Math.max(1, ...monthlyChart);
 
   useEffect(() => {
     const now = new Date();
@@ -284,6 +306,22 @@ export default function Home() {
     }
     setStorageReady(true);
   }, []);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem('daniel-os-money-v1') || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
+      if (saved) {
+        setCash(Number(saved.cash) || 0);
+        setMoneyTransactions(saved.transactions || []);
+        setMoneyAssets(saved.assets || []);
+      }
+    } catch { /* Empieza en cero si el registro local no es válido. */ }
+    setMoneyReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (moneyReady) localStorage.setItem('daniel-os-money-v1', JSON.stringify({ cash, transactions: moneyTransactions, assets: moneyAssets }));
+  }, [moneyReady, cash, moneyTransactions, moneyAssets]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -377,13 +415,26 @@ export default function Home() {
     setNewIdea('');
     setShowIdeaForm(false);
   };
+  const openMoneyModal = (type: MoneyModal) => { setMoneyModal(type); setMoneyConcept(''); setMoneyAmount(''); };
+  const saveMoney = () => {
+    const amount = Number(moneyAmount);
+    if (!moneyModal || !Number.isFinite(amount) || amount < 0 || (moneyModal !== 'balance' && amount === 0)) return;
+    if (moneyModal === 'balance') setCash(amount);
+    else if (moneyModal === 'asset') setMoneyAssets((items) => [...items, { id: Date.now(), name: moneyConcept.trim() || 'Patrimonio', detail: 'Valor registrado', value: amount }]);
+    else {
+      const type = moneyModal;
+      setMoneyTransactions((items) => [{ id: Date.now(), type, concept: moneyConcept.trim() || (type === 'income' ? 'Ingreso' : 'Gasto'), amount, date: new Date().toISOString() }, ...items]);
+      setCash((value) => value + (type === 'income' ? amount : -amount));
+    }
+    setMoneyModal(null);
+  };
 
   const nextLevel = Math.min(level + 1, 40);
   const profileRequirements = [
-    { icon: '✦', label: 'XP', current: '2,450', target: '3,500', progress: 70, tone: 'purple' },
-    { icon: '$', label: 'Patrimonio', current: '$800,000', target: '$1,000,000', progress: 80, tone: 'green' },
-    { icon: '↗', label: 'Ingreso mensual', current: '$75,000', target: '$70,000', progress: 100, tone: 'blue' },
-    { icon: '◈', label: 'Estabilidad', current: '80%', target: '70%', progress: 100, tone: 'orange' },
+    { icon: '✦', label: 'XP', current: earnedXp.toLocaleString('es-MX'), target: '3,500', progress: Math.min(100, Math.round(earnedXp / 3500 * 100)), tone: 'purple' },
+    { icon: '$', label: 'Patrimonio', current: formatMoney(totalWorth), target: '$1,000,000', progress: Math.min(100, Math.round(totalWorth / 1_000_000 * 100)), tone: 'green' },
+    { icon: '↗', label: 'Ingreso mensual', current: formatMoney(monthlyIncome), target: '$70,000', progress: Math.min(100, Math.round(monthlyIncome / 70_000 * 100)), tone: 'blue' },
+    { icon: '◈', label: 'Estabilidad', current: '0%', target: '70%', progress: 0, tone: 'orange' },
   ];
 
   return (
@@ -434,15 +485,15 @@ export default function Home() {
               <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
             </article>
             <div className="profileBottom">
-              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>$200,000 de patrimonio</b></p><p><i>✦</i><b>1,050 XP</b></p></article>
+              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>{formatMoney(Math.max(0, 1_000_000 - totalWorth))} de patrimonio</b></p><p><i>✦</i><b>{Math.max(0, 3500 - earnedXp).toLocaleString('es-MX')} XP</b></p></article>
               <article className="rewardCard"><span>AL COMPLETAR TODOS LOS REQUISITOS</span><b>♕</b><h3>NIVEL DESBLOQUEADO</h3><p>Tu progreso queda guardado para siempre.</p><small>▣ Nivel guardado permanentemente</small></article>
             </div>
             <section className="moneyPanel" aria-label="Resumen de dinero y patrimonio">
               <header><div><span>▱</span><h2>MI DINERO</h2><p>Resumen simple de tu dinero y patrimonio.</p></div><b>♨</b></header>
-              <div className="moneyTotals"><article><span>▣ PATRIMONIO TOTAL</span><b>$1,055,000</b><small>MXN</small><em>Incluye patrimonio</em></article><article><span>▤ DISPONIBLE</span><b>$205,000</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ PATRIMONIO</span><b>$850,000</b><small>MXN</small><em>Valor de activos</em></article></div>
-              <div className="moneyActions"><button><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
-              <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button>Ver todo</button></header><p><span>Ingreso del mes</span><strong>$75,000 ↑</strong></p><p><span>Gasto del mes</span><strong>−$32,000 ↓</strong></p><p><span>Balance mensual</span><strong>$43,000</strong></p><p className="cashRow"><span>Dinero actual</span><strong>$205,000</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button>Ver todo</button></header><p><i>▲</i><span><b>Terreno</b><small>Valor estimado</small></span><strong>$300,000 <small>MXN</small></strong></p><p><i>▥</i><span><b>Ahorros</b><small>Cuenta de ahorro</small></span><strong>$250,000 <small>MXN</small></strong></p><p><i>▣</i><span><b>Equipo / setup</b><small>Computadora y accesorios</small></span><strong>$150,000 <small>MXN</small></strong></p><button className="addAsset">＋ Agregar patrimonio</button></article></div>
-              <article className="moneyChart"><header><b>▥ DINERO GANADO 2026</b><strong>▲ +$420,000 este año</strong></header><div className="chartBars">{[18,25,36,43,48,56,59,61,75,81,87,100].map((height, index) => <i style={{height:`${height}%`}} key={index}><span /></i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
+              <div className="moneyTotals"><article><span>▣ PATRIMONIO TOTAL</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Incluye patrimonio</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ PATRIMONIO</span><b>{formatMoney(assetsTotal)}</b><small>MXN</small><em>Valor de activos</em></article></div>
+              <div className="moneyActions"><button onClick={() => openMoneyModal('income')}><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button onClick={() => openMoneyModal('expense')}><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button onClick={() => openMoneyModal('balance')}><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
+              <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button onClick={() => openMoneyModal('transactions')}>Ver todo</button></header><p><span>Ingreso del mes</span><strong>{formatMoney(monthlyIncome)} ↑</strong></p><p><span>Gasto del mes</span><strong>−{formatMoney(monthlyExpense)} ↓</strong></p><p><span>Balance mensual</span><strong>{formatMoney(monthlyIncome - monthlyExpense)}</strong></p><p className="cashRow"><span>Dinero actual</span><strong>{formatMoney(cash)}</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button onClick={() => openMoneyModal('assets')}>Ver todo</button></header>{moneyAssets.length ? moneyAssets.slice(0, 3).map((asset) => <p key={asset.id}><i>◇</i><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)} <small>MXN</small></strong></p>) : <p className="emptyMoney">Aún no has registrado patrimonio.</p>}<button className="addAsset" onClick={() => openMoneyModal('asset')}>＋ Agregar patrimonio</button></article></div>
+              <article className="moneyChart"><header><b>▥ DINERO GANADO {now.getFullYear()}</b><strong>▲ +{formatMoney(annualIncome)} este año</strong></header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
             </section>
           </section>
         ) : (
@@ -464,6 +515,7 @@ export default function Home() {
           </>
         )}
 
+        {moneyModal && <div className="modalBackdrop" role="presentation" onMouseDown={() => setMoneyModal(null)}><section className="itemModal moneyModal" role="dialog" aria-modal="true" aria-label="Registro de dinero" onMouseDown={(event) => event.stopPropagation()}><header><div><span>MI DINERO</span><h2>{moneyModal === 'income' ? 'Registrar ingreso' : moneyModal === 'expense' ? 'Registrar gasto' : moneyModal === 'balance' ? 'Ajustar dinero actual' : moneyModal === 'asset' ? 'Agregar patrimonio' : moneyModal === 'transactions' ? 'Todos los movimientos' : 'Todo mi patrimonio'}</h2></div><button onClick={() => setMoneyModal(null)} aria-label="Cerrar">×</button></header>{moneyModal === 'transactions' ? <div className="moneyDetailList">{moneyTransactions.length ? moneyTransactions.map((item) => <article key={item.id}><span><b>{item.concept}</b><small>{new Date(item.date).toLocaleDateString('es-MX')}</small></span><strong className={item.type}>{item.type === 'expense' ? '−' : '+'}{formatMoney(item.amount)}</strong></article>) : <p>No hay movimientos todavía.</p>}</div> : moneyModal === 'assets' ? <div className="moneyDetailList">{moneyAssets.length ? moneyAssets.map((asset) => <article key={asset.id}><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)}</strong></article>) : <p>No hay patrimonio registrado todavía.</p>}</div> : <><label>{moneyModal === 'asset' ? 'Nombre del patrimonio' : moneyModal === 'balance' ? 'Nota (opcional)' : 'Concepto'}<input autoFocus value={moneyConcept} onChange={(event) => setMoneyConcept(event.target.value)} placeholder={moneyModal === 'asset' ? 'Ej. Ahorros' : 'Ej. Venta del mes'} /></label><label>Cantidad MXN<input type="number" min="0" step="100" value={moneyAmount} onChange={(event) => setMoneyAmount(event.target.value)} placeholder="$0" /></label><button className="saveItem" onClick={saveMoney}>Guardar registro</button></>}</section></div>}
         {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : modalType === 'task' ? 'NUEVA TAREA' : 'NUEVO RECORDATORIO'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : modalType === 'task' ? 'Agregar pendiente' : 'Pendiente general'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label>{modalType === 'reminder' ? <fieldset><legend>Categoría</legend><div className="categoryOptions">{reminderCategories.map((category) => <button className={itemCategory === category ? 'selected' : ''} onClick={() => setItemCategory(category)} key={category}>{category}</button>)}</div><p className="noReward">Este recordatorio no otorga XP ni monedas.</p></fieldset> : <fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset>}<button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : modalType === 'task' ? 'tarea' : 'recordatorio'}</button></section></div>}
         {habitToDelete !== null && <div className="modalBackdrop" role="presentation" onMouseDown={() => setHabitToDelete(null)}><section className="deleteModal" role="alertdialog" aria-modal="true" aria-labelledby="delete-habit-title" onMouseDown={(event) => event.stopPropagation()}><span>ELIMINAR HÁBITO</span><h2 id="delete-habit-title">¿Quieres borrar “{activityItems[habitToDelete]?.[0]}”?</h2><p>El hábito dejará de aparecer en tu lista diaria.</p><div><button onClick={() => setHabitToDelete(null)}>Cancelar</button><button className="confirmDelete" onClick={deleteHabit}>Confirmar</button></div></section></div>}
         {showHistory && <div className="modalBackdrop" role="presentation" onMouseDown={() => setShowHistory(false)}><section className="historyModal" role="dialog" aria-modal="true" aria-label="Historial mensual de hábitos" onMouseDown={(event) => event.stopPropagation()}><header><div><span>HISTORIAL DE HÁBITOS</span><h2>{monthLabel}</h2></div><button onClick={() => setShowHistory(false)} aria-label="Cerrar">×</button></header><div className="monthControls"><button onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹ Mes anterior</button><p>El historial comienza el {new Date(`${historyStart}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p><button disabled={isCurrentMonth} onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Mes siguiente ›</button></div><div className="monthWeekdays">{['L','M','X','J','V','S','D'].map((day) => <b key={day}>{day}</b>)}</div><div className="monthGrid">{monthCalendar.map((cell, index) => cell ? <article className={`${cell.key === dayKey() ? 'today' : ''} ${cell.key < historyStart || cell.key > dayKey() ? 'emptyDay' : ''}`} key={cell.key}><span>{cell.day}</span>{activityHistory[cell.key] === undefined ? <small>—</small> : <><div><i style={{ height: `${activityHistory[cell.key]}%` }} /></div><b>{activityHistory[cell.key]}%</b></>}</article> : <i key={`empty-${index}`} />)}</div><footer><span><i /> Sin actividad</span><span><i /> Progreso registrado</span></footer></section></div>}
