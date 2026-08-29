@@ -2,54 +2,16 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fullStudyBranches } from './study-data';
+import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, percentage, type ProgressionState } from './config/gameConfig';
+import { LEVEL_NAMES, requirementForLevel } from './config/levelConfig';
+import { XP_CONFIG, xpFromLabel } from './config/xpConfig';
+import { REWARD_CONFIG } from './config/rewardConfig';
+import { skillLevel } from './config/skillConfig';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
-type MoneyAsset = { id: number; name: string; detail: string; value: number };
+type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
 type MoneyModal = 'income' | 'expense' | 'balance' | 'asset' | 'transactions' | 'assets' | null;
 const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
-
-const levelNames = [
-  'El inicio',
-  'Pequeños hábitos, grandes cambios',
-  'Un poco más enfocado',
-  'Primeras mejoras',
-  'Modo supervivencia estable',
-  'Primer monitor, más productividad',
-  'Usar el dinero inteligentemente',
-  'Más disciplina, más resultados',
-  'Mejor apariencia, más confianza',
-  'Primera gran etapa completada',
-  'Mejor tecnología, más oportunidades',
-  'Primer guardarropa bueno',
-  'Fitness visible',
-  'Primer smartphone premium',
-  'Primer estilo premium',
-  'Primer espacio realmente bonito',
-  'Primera escapada: viaje',
-  'Trabajo más profesional',
-  'Primer reloj de gama media',
-  'Departamento propio: independencia',
-  'Primer coche propio',
-  'Mejor guardarropa y accesorios',
-  'Oficina personal: primera oficina',
-  'Primer coche premium',
-  'Departamento premium',
-  'Departamento premium renovado',
-  'Ecosistema tecnológico premium',
-  'Coche deportivo de entrada',
-  'Equipo y oficina en crecimiento',
-  'Vida premium nocturna',
-  'Patrimonio en movimiento',
-  'Penthouse y exclusividad',
-  'Penthouse en Cancún',
-  'Viaje premium a París',
-  'Experiencias gastronómicas premium',
-  'Empresa e inversiones',
-  'Casa familiar premium',
-  'Patrimonio internacional',
-  'Club y conexiones',
-  'Vida extraordinaria',
-];
 
 const skills = [
   ['Finanzas', '1,870 / 2,500', '75%', '/icons/finance.webp'],
@@ -85,8 +47,8 @@ const pendingActivities = [
 ];
 
 const weekProgress = [65, 80, 55, 90, 72, 45, 30];
-const habitXp = [['5', 'Sencillo'], ['10', 'Medio'], ['15', 'Difícil'], ['25', 'Me cuesta (GYM)']];
-const taskXp = [['0', 'Delegada'], ['5', 'Baja'], ['20', 'Intermedia'], ['40', 'Media'], ['55', 'Difícil'], ['70', 'Máximo']];
+const habitXp = XP_CONFIG.habits;
+const taskXp = XP_CONFIG.tasks;
 const reminderCategories = ['Compras', 'Hogar', 'Trabajo', 'Negocio', 'Personal', 'Estudio'];
 const initialReminders = [
   ['Comprar escritorio', 'Comparar opciones', 'Compras'],
@@ -136,7 +98,7 @@ const studyBranches: StudyBranch[] = [
   { name: 'Habilidades sociales', icon: '👥', level: 2, tone: 'orange', topics: [{ name: 'Comunicación', progress: 50, modules: [] }, { name: 'Negociación', progress: 25, modules: [] }, { name: 'Networking', progress: 20, modules: [] }] },
 ];
 
-function StudyView() {
+function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, done: boolean) => void; onKnowledgeSummary: (completed: number) => void }) {
   const [branches, setBranches] = useState(fullStudyBranches);
   const [branchIndex, setBranchIndex] = useState<number | null>(null);
   const [topicIndex, setTopicIndex] = useState<number | null>(null);
@@ -167,6 +129,8 @@ function StudyView() {
   const openBranch = (index: number) => { setBranchIndex(index); setTopicIndex(null); };
   const toggleStudyTask = (moduleIndex: number, taskIndex: number) => {
     if (branchIndex === null || topicIndex === null) return;
+    const nextDone = !branches[branchIndex].topics[topicIndex].modules[moduleIndex].tasks[taskIndex].done;
+    onTaskToggled(branches[branchIndex].name, nextDone);
     setBranches((current) => current.map((branch, bi) => {
       if (bi !== branchIndex) return branch;
       let topics = branch.topics.map((topic, ti) => {
@@ -181,6 +145,7 @@ function StudyView() {
       return { ...branch, topics, level: Math.min(topics.length, completedLevels + 1) };
     }));
   };
+  useEffect(() => { if (studyReady) onKnowledgeSummary(completedTopics); }, [studyReady, completedTopics]);
   const saveMaterial = () => {
     if (!material.title.trim()) return;
     setSaved((current) => [{ ...material, title: material.title.trim() }, ...current]);
@@ -193,6 +158,7 @@ function StudyView() {
     <header className="studyHeader"><div><span>📖 PLAN DE ESTUDIOS</span><h1>Árbol de conocimiento</h1><p>Aprende hoy, construye la vida que quieres.</p></div><div className="studyTools"><label>⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar ramas o temas" /></label><button onClick={() => setShowSave(true)}>＋ Guardar para estudiar</button></div></header>
     {selectedBranch ? <div className="coursePanel">
       <button className="studyBack" onClick={() => topicIndex === null ? setBranchIndex(null) : setTopicIndex(null)}>‹ {topicIndex === null ? 'Volver al árbol' : selectedBranch.name}</button>
+      <small>{selectedBranch.name}: {skillXp[selectedBranch.name] || 0} XP · Nivel {skillLevel(skillXp[selectedBranch.name] || 0)}</small>
       {selectedTopic ? <div className="topicCourse"><header><span>{selectedBranch.icon} {selectedBranch.name}</span><h2>{selectedTopic.name}</h2><div><i style={{ width: `${selectedTopic.progress}%` }} /></div><b>{selectedTopic.progress}% completado</b></header><div className="moduleList">{selectedTopic.modules.length ? selectedTopic.modules.map((module, moduleIndex) => { const done = module.tasks.length > 0 && module.tasks.every((task) => task.done); return <article key={module.name}><header><span>MÓDULO {moduleIndex + 1}</span><b>{module.name}</b><em>{done ? '✓ Completado' : module.tasks.some((task) => task.done) ? 'En progreso' : 'Pendiente'}</em></header>{module.tasks.map((task, taskIndex) => <button className={task.done ? 'done' : ''} onClick={() => toggleStudyTask(moduleIndex, taskIndex)} key={task.name}><i>{task.done ? '✓' : ''}</i><span>{task.name}</span></button>)}</article>; }) : <div className="emptyCourse"><b>Curso listo para crecer</b><p>Guarda videos, lecturas o prácticas para construir este tema.</p><button onClick={() => setShowSave(true)}>＋ Agregar material</button></div>}</div></div> : <><div className={`branchTitle ${selectedBranch.tone}`}><i>{selectedBranch.icon}</i><span><small>RAMA DE CONOCIMIENTO</small><h2>{selectedBranch.name}</h2><b>Nivel {selectedBranch.level}</b></span></div><div className="topicList">{selectedBranch.topics.map((topic, index) => <button disabled={topic.locked} onClick={() => setTopicIndex(index)} key={topic.name}><i>{topic.locked ? '🔒' : topic.progress === 100 ? '✓' : topic.progress > 0 ? '●' : '○'}</i><span><b>{topic.name}</b><small>{topic.locked ? 'Completa los temas anteriores' : topic.progress === 100 ? 'Completado' : topic.progress > 0 ? 'En curso' : 'Sin empezar'}</small></span>{!topic.locked && <><div><em style={{ width: `${topic.progress}%` }} /></div><strong>{topic.progress}%</strong></>}</button>)}</div></>}
     </div> : <><div className="studyOverview"><article><div className="progressRing" style={{ '--progress': `${overall * 3.6}deg` } as CSSProperties}><b>{overall}%</b><span>completado</span></div><ul><li><i />Completados <b>{completedTopics}</b></li><li><i />En curso <b>{totalTopics - completedTopics}</b></li><li><i />Por aprender <b>{saved.length}</b></li></ul><p>“Un poco mejor cada día, grandes resultados con el tiempo.”</p></article><div className="knowledgeTree" style={{ backgroundImage: 'linear-gradient(#08051a22,#08051aaa),url(/study-tree.png)' }}>{visibleBranches.map(({ branch, index }) => { const progress = Math.round(branch.topics.reduce((sum, topic) => sum + topic.progress, 0) / branch.topics.length); return <button className={`treeNode node${index + 1} ${branch.tone}`} onClick={() => openBranch(index)} key={branch.name}><i>{branch.icon}</i><span><b>{branch.name}</b><small>Nivel {branch.level} · {progress}%</small><em><strong style={{ width: `${progress}%` }} /></em></span></button>; })}</div></div>{saved.length > 0 && <section className="studyInbox"><header><div><span>📥</span><h2>Pendiente por aprender</h2></div><b>{saved.length} guardados</b></header><div>{saved.map((item, index) => <article key={`${item.title}-${index}`}><i>{item.type.split(' ')[0]}</i><span><b>{item.title}</b><small>{item.branch} → {item.topic}</small></span><em>{item.type.replace(/^\S+\s/, '')}</em></article>)}</div></section>}</>}
     {showSave && <div className="studyModalBackdrop" onMouseDown={() => setShowSave(false)}><section className="studyModal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><span>GUARDAR PARA ESTUDIAR</span><h2>Nuevo material</h2></div><button onClick={() => setShowSave(false)}>×</button></header><label>Título<input autoFocus value={material.title} onChange={(event) => setMaterial({ ...material, title: event.target.value })} placeholder="Ej. Cómo manejar objeciones" /></label><label>Rama<select value={material.branch} onChange={(event) => { const branch = branches.find((item) => item.name === event.target.value)!; setMaterial({ ...material, branch: branch.name, topic: branch.topics.find((topic) => !topic.locked)?.name || '' }); }}>{branches.map((branch) => <option key={branch.name}>{branch.name}</option>)}</select></label><label>Tema<select value={material.topic} onChange={(event) => setMaterial({ ...material, topic: event.target.value })}>{branchTopics.map((topic) => <option key={topic.name}>{topic.name}</option>)}</select></label><fieldset><legend>Tipo</legend><div>{['🎥 Video','📄 Artículo','📚 Libro','🧪 Práctica','📝 Nota'].map((type) => <button className={material.type === type ? 'selected' : ''} onClick={() => setMaterial({ ...material, type })} key={type}>{type}</button>)}</div></fieldset><button className="saveStudy" onClick={saveMaterial}>Guardar material</button></section></div>}
@@ -214,7 +180,10 @@ const buildMonth = (month: Date) => {
 
 export default function Home() {
   const [active, setActive] = useState('HOME');
-  const [level, setLevel] = useState(1);
+  const [progression, setProgression] = useState<ProgressionState>(INITIAL_PROGRESSION);
+  const [progressionReady, setProgressionReady] = useState(false);
+  const [coverLevel, setCoverLevel] = useState(1);
+  const [knowledgeTopics, setKnowledgeTopics] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [ideaItems, setIdeaItems] = useState(initialIdeas);
   const [newIdea, setNewIdea] = useState('');
@@ -244,14 +213,16 @@ export default function Home() {
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyConcept, setMoneyConcept] = useState('');
   const [moneyAmount, setMoneyAmount] = useState('');
+  const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
-  const levelCover = `/levels/level-${String(level).padStart(2, '0')}.webp`;
+  const level = progression.level;
+  const levelCover = `/levels/level-${String(coverLevel).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
   const levelTier = level >= 30 ? 'gold' : level >= 15 ? 'silver' : 'bronze';
   const levelTierLabel = level >= 30 ? 'oro' : level >= 15 ? 'plata' : 'bronce';
   const completion = activityItems.length ? Math.round(doneActivities.length / activityItems.length * 100) : 0;
   const taskCompletion = taskItems.length ? Math.round(doneTasks.length / taskItems.length * 100) : 0;
-  const earnedXp = doneActivities.reduce((total, index) => total + Number(activityItems[index]?.[3].replace(/\D/g, '') || 0), 0) + doneTasks.reduce((total, index) => total + Number(taskItems[index]?.[3].replace(/\D/g, '') || 0), 0);
+  const todayXp = doneActivities.reduce((total, index) => total + xpFromLabel(activityItems[index]?.[3]), 0) + doneTasks.reduce((total, index) => total + xpFromLabel(taskItems[index]?.[3]), 0);
   const dayCompletion = Math.round((completion + taskCompletion) / 2);
   const liveWeekProgress = weekProgress.map((value, index) => index > calendar.todayIndex ? 0 : index === calendar.todayIndex ? completion : value);
   const monthCalendar = buildMonth(historyMonth);
@@ -262,11 +233,23 @@ export default function Home() {
   const monthlyTransactions = moneyTransactions.filter((item) => item.date.startsWith(currentMonth));
   const monthlyIncome = monthlyTransactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0);
   const monthlyExpense = monthlyTransactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0);
-  const assetsTotal = moneyAssets.reduce((sum, item) => sum + item.value, 0);
-  const totalWorth = cash + assetsTotal;
+  const assetsTotal = moneyAssets.filter((item) => item.kind !== 'debt').reduce((sum, item) => sum + item.value, 0);
+  const debtTotal = moneyAssets.filter((item) => item.kind === 'debt').reduce((sum, item) => sum + item.value, 0);
+  const totalWorth = cash + assetsTotal - debtTotal;
+  const netMonthlyIncome = monthlyIncome - monthlyExpense;
   const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(now.getFullYear()))).reduce((sum, item) => sum + item.amount, 0);
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${now.getFullYear()}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
   const chartMax = Math.max(1, ...monthlyChart);
+  const healthActivityIndexes = activityItems.map((item, index) => ({ item, index })).filter(({ item }) => /agua|entren|ejercicio|salud|gym/i.test(item[0])).map(({ index }) => index);
+  const healthCompletion = percentage(healthActivityIndexes.filter((index) => doneActivities.includes(index)).length, healthActivityIndexes.length);
+  const todayStability = {
+    habits: completion,
+    productivity: taskCompletion,
+    finances: monthlyTransactions.length ? (netMonthlyIncome >= 0 ? 100 : 0) : 0,
+    health: healthCompletion,
+    learning: (progression.learningByDay[dayKey()] || 0) > 0 ? 100 : 0,
+  };
+  const stability = averageStability({ ...progression.stabilityByDay, [dayKey()]: todayStability }, now);
 
   useEffect(() => {
     const now = new Date();
@@ -309,18 +292,30 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem('daniel-os-money-v1') || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
+      const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.progression) || 'null') as Partial<ProgressionState> | null;
+      if (saved) setProgression({ ...INITIAL_PROGRESSION, ...saved, skillXp: saved.skillXp || {}, learningByDay: saved.learningByDay || {}, stabilityByDay: saved.stabilityByDay || {} });
+    } catch { /* El sistema comienza en cero. */ }
+    setProgressionReady(true);
+  }, []);
+
+  useEffect(() => {
+    if (progressionReady) localStorage.setItem(GAME_CONFIG.storage.progression, JSON.stringify(progression));
+  }, [progressionReady, progression]);
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.money) || localStorage.getItem('daniel-os-money-v1') || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
       if (saved) {
         setCash(Number(saved.cash) || 0);
         setMoneyTransactions(saved.transactions || []);
-        setMoneyAssets(saved.assets || []);
+        setMoneyAssets((saved.assets || []).map((asset) => ({ ...asset, kind: asset.kind || 'asset' })));
       }
     } catch { /* Empieza en cero si el registro local no es válido. */ }
     setMoneyReady(true);
   }, []);
 
   useEffect(() => {
-    if (moneyReady) localStorage.setItem('daniel-os-money-v1', JSON.stringify({ cash, transactions: moneyTransactions, assets: moneyAssets }));
+    if (moneyReady) localStorage.setItem(GAME_CONFIG.storage.money, JSON.stringify({ cash, transactions: moneyTransactions, assets: moneyAssets }));
   }, [moneyReady, cash, moneyTransactions, moneyAssets]);
 
   useEffect(() => {
@@ -340,6 +335,11 @@ export default function Home() {
     if (!storageReady) return;
     setActivityHistory((current) => current[dayKey()] === completion ? current : { ...current, [dayKey()]: completion });
   }, [storageReady, completion]);
+
+  useEffect(() => {
+    if (!progressionReady || !storageReady || !moneyReady) return;
+    setProgression((current) => ({ ...current, stabilityByDay: { ...current.stabilityByDay, [dayKey()]: todayStability } }));
+  }, [progressionReady, storageReady, moneyReady, completion, taskCompletion, healthCompletion, monthlyIncome, monthlyExpense, progression.learningByDay[dayKey()]]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -371,15 +371,25 @@ export default function Home() {
     return () => window.clearTimeout(timer);
   }, [doneTasks]);
 
-  const chooseLevel = (next: number) => {
-    if (next > 40) return;
-    setLevel(next);
-    setCompleted(false);
-    setActive('HOME');
-  };
+  useEffect(() => { setCoverLevel(level); }, [level]);
 
-  const toggleActivity = (index: number) => setDoneActivities((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
-  const toggleTask = (index: number) => setDoneTasks((current) => current.includes(index) ? current.filter((item) => item !== index) : [...current, index]);
+  const changeGeneralXp = (amount: number) => setProgression((current) => ({ ...current, generalXp: Math.max(0, current.generalXp + amount) }));
+  const toggleActivity = (index: number) => {
+    const done = doneActivities.includes(index);
+    changeGeneralXp((done ? -1 : 1) * xpFromLabel(activityItems[index]?.[3]));
+    setDoneActivities((current) => done ? current.filter((item) => item !== index) : [...current, index]);
+  };
+  const toggleTask = (index: number) => {
+    const done = doneTasks.includes(index);
+    changeGeneralXp((done ? -1 : 1) * xpFromLabel(taskItems[index]?.[3]));
+    setDoneTasks((current) => done ? current.filter((item) => item !== index) : [...current, index]);
+  };
+  const toggleStudyProgress = (branch: string, done: boolean) => setProgression((current) => ({
+    ...current,
+    generalXp: Math.max(0, current.generalXp + (done ? XP_CONFIG.studyTask.general : -XP_CONFIG.studyTask.general)),
+    skillXp: { ...current.skillXp, [branch]: Math.max(0, (current.skillXp[branch] || 0) + (done ? XP_CONFIG.studyTask.skill : -XP_CONFIG.studyTask.skill)) },
+    learningByDay: { ...current.learningByDay, [dayKey()]: Math.max(0, (current.learningByDay[dayKey()] || 0) + (done ? 1 : -1)) },
+  }));
   const toggleReminder = (index: number) => {
     const key = reminderKey(reminderItems[index]);
     if (doneReminders.includes(index)) {
@@ -415,12 +425,12 @@ export default function Home() {
     setNewIdea('');
     setShowIdeaForm(false);
   };
-  const openMoneyModal = (type: MoneyModal) => { setMoneyModal(type); setMoneyConcept(''); setMoneyAmount(''); };
+  const openMoneyModal = (type: MoneyModal) => { setMoneyModal(type); setMoneyConcept(''); setMoneyAmount(''); setMoneyAssetKind('asset'); };
   const saveMoney = () => {
     const amount = Number(moneyAmount);
     if (!moneyModal || !Number.isFinite(amount) || amount < 0 || (moneyModal !== 'balance' && amount === 0)) return;
     if (moneyModal === 'balance') setCash(amount);
-    else if (moneyModal === 'asset') setMoneyAssets((items) => [...items, { id: Date.now(), name: moneyConcept.trim() || 'Patrimonio', detail: 'Valor registrado', value: amount }]);
+    else if (moneyModal === 'asset') setMoneyAssets((items) => [...items, { id: Date.now(), name: moneyConcept.trim() || 'Patrimonio', detail: moneyAssetKind === 'debt' ? 'Deuda registrada' : 'Valor registrado', value: amount, kind: moneyAssetKind }]);
     else {
       const type = moneyModal;
       setMoneyTransactions((items) => [{ id: Date.now(), type, concept: moneyConcept.trim() || (type === 'income' ? 'Ingreso' : 'Gasto'), amount, date: new Date().toISOString() }, ...items]);
@@ -430,12 +440,21 @@ export default function Home() {
   };
 
   const nextLevel = Math.min(level + 1, 40);
+  const nextRequirement = requirementForLevel(nextLevel);
+  const bossProgress = nextRequirement.boss ? percentage(knowledgeTopics, nextRequirement.boss.completedKnowledgeTopics) : 100;
   const profileRequirements = [
-    { icon: '✦', label: 'XP', current: earnedXp.toLocaleString('es-MX'), target: '3,500', progress: Math.min(100, Math.round(earnedXp / 3500 * 100)), tone: 'purple' },
-    { icon: '$', label: 'Patrimonio', current: formatMoney(totalWorth), target: '$1,000,000', progress: Math.min(100, Math.round(totalWorth / 1_000_000 * 100)), tone: 'green' },
-    { icon: '↗', label: 'Ingreso mensual', current: formatMoney(monthlyIncome), target: '$70,000', progress: Math.min(100, Math.round(monthlyIncome / 70_000 * 100)), tone: 'blue' },
-    { icon: '◈', label: 'Estabilidad', current: '0%', target: '70%', progress: 0, tone: 'orange' },
+    { icon: '✦', label: 'XP general', current: progression.generalXp.toLocaleString('es-MX'), target: nextRequirement.xp.toLocaleString('es-MX'), progress: percentage(progression.generalXp, nextRequirement.xp), tone: 'purple' },
+    { icon: '$', label: 'Patrimonio neto', current: formatMoney(totalWorth), target: formatMoney(nextRequirement.netWorth), progress: percentage(totalWorth, nextRequirement.netWorth), tone: 'green' },
+    { icon: '↗', label: 'Ingreso neto mensual', current: formatMoney(netMonthlyIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(netMonthlyIncome, nextRequirement.netMonthlyIncome), tone: 'blue' },
+    { icon: '◈', label: 'Estabilidad', current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange' },
+    ...(nextRequirement.boss ? [{ icon: '♕', label: nextRequirement.boss.label, current: String(knowledgeTopics), target: String(nextRequirement.boss.completedKnowledgeTopics), progress: bossProgress, tone: 'purple' }] : []),
   ];
+  const canLevelUp = level < GAME_CONFIG.maxLevel && profileRequirements.every((item) => item.progress >= 100);
+
+  useEffect(() => {
+    if (!progressionReady || !canLevelUp) return;
+    setProgression((current) => ({ ...current, level: Math.min(GAME_CONFIG.maxLevel, current.level + 1), coins: current.coins + REWARD_CONFIG.levelUpCoins }));
+  }, [progressionReady, canLevelUp, level]);
 
   return (
     <main className="stage">
@@ -443,9 +462,9 @@ export default function Home() {
         <header className="topbar">
           <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
           <div className="topStats">
-            <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>{earnedXp.toLocaleString('es-MX')}</strong></span></div>
-            <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>0</strong></span></div>
-            <div className="statCard streakCard"><img src="/icons/streak.webp" alt="" /><span><b>Racha</b><strong>0 <small>días</small></strong></span></div>
+            <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>{progression.generalXp.toLocaleString('es-MX')}</strong></span></div>
+            <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>{progression.coins.toLocaleString('es-MX')}</strong></span></div>
+            <div className="statCard streakCard"><img src="/icons/streak.webp" alt="" /><span><b>Racha</b><strong>{progression.streak} <small>días</small></strong></span></div>
           </div>
         </header>
 
@@ -458,20 +477,20 @@ export default function Home() {
             </div>
           </section>
         ) : active === 'Estudio' ? (
-          <StudyView />
+          <StudyView skillXp={progression.skillXp} onTaskToggled={toggleStudyProgress} onKnowledgeSummary={setKnowledgeTopics} />
         ) : active === 'Actividades' ? (
           <section className="activitiesView" aria-label="Panel de actividades">
             <div className="activitiesHeading"><div><span>HOY · {calendar.date || 'FECHA ACTUAL'}</span><h1>Actividades</h1><p>Pequeñas acciones, grandes resultados.</p></div><div className="dailyScore"><b>{doneActivities.length}/{activityItems.length}</b><span>completadas</span></div></div>
             <div className="activitySummary">
-              <article><img src="/icons/streak.webp" alt="" /><span><small>Racha</small><b>0 días</b></span></article>
-              <article><img src="/icons/xp.webp" alt="" /><span><small>XP de hoy</small><b>+{earnedXp}</b></span></article>
+              <article><img src="/icons/streak.webp" alt="" /><span><small>Racha</small><b>{progression.streak} días</b></span></article>
+              <article><img src="/icons/xp.webp" alt="" /><span><small>XP de hoy</small><b>+{todayXp}</b></span></article>
               <article><img src="/icons/habits.webp" alt="" /><span><small>Objetivo diario</small><b>{completion}%</b></span></article>
               <article><img src="/icons/pending.webp" alt="" /><span><small>Pendientes</small><b>{taskItems.length} activos</b></span></article>
             </div>
             <div className="activityBoard">
               <article className="activityBox habitsBox"><header><div><b>Hábitos de hoy</b><small>Marca lo que vayas completando</small></div><div className="boxActions"><strong>{doneActivities.length}/{activityItems.length}</strong><button onClick={() => openItemModal('habit')}>＋ Agregar hábito</button></div></header><div className="activityList">{activityItems.map(([name, detail, icon, xp], index) => <div className="activityRow" key={`${name}-${index}`}><button className={`activityCheck ${doneActivities.includes(index) ? 'done' : ''}`} onClick={() => toggleActivity(index)}><i>{doneActivities.includes(index) ? '✓' : ''}</i><img src={icon} alt="" /><span><b>{name}</b><small>{detail}</small></span><em>{xp}</em></button><button className="deleteHabit" onClick={() => setHabitToDelete(index)} aria-label={`Eliminar hábito ${name}`} title="Eliminar hábito">🗑</button></div>)}</div></article>
               <article className="activityBox pendingBox"><header><div><b>Pendientes prioritarios</b><small>Enfócate en lo importante</small></div><div className="boxActions"><strong>{doneTasks.length}/{taskItems.length}</strong><button onClick={() => openItemModal('task')}>＋ Agregar tarea</button></div></header><div className="pendingList">{taskItems.map(([name, description, difficulty, xp], index) => <button className={doneTasks.includes(index) ? 'done' : ''} onClick={() => toggleTask(index)} key={`${name}-${index}`}><i>{doneTasks.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><span className="taskMeta"><em className={`priority ${difficulty.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')}`}>{difficulty}</em><small>{xp}</small></span></button>)}</div></article>
-              <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{earnedXp}</b><i><em style={{width:`${Math.min(earnedXp / 3, 100)}%`}} /></i><small>{earnedXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
+              <article className="activityBox statsBox"><header><div><b>▥ Estadísticas de hoy</b><small>Tu progreso en números</small></div></header><div className="todayStats"><div><span>✓ Hábitos</span><b>{doneActivities.length} / {activityItems.length}</b><i><em style={{width:`${completion}%`}} /></i><small>{completion}%</small></div><div><span>▣ Pendientes</span><b>{doneTasks.length} / {taskItems.length}</b><i><em style={{width:`${taskCompletion}%`}} /></i><small>{taskCompletion}%</small></div><div><span>✦ XP ganado</span><b>+{todayXp}</b><i><em style={{width:`${Math.min(todayXp / 3, 100)}%`}} /></i><small>{todayXp} XP</small></div><div><span>★ Día completado</span><b>{dayCompletion}%</b><i><em style={{width:`${dayCompletion}%`}} /></i><small>{dayCompletion}%</small></div></div></article>
               <article className="activityBox weeklyBox"><header><div><b>Progreso semanal</b><small>{calendar.label} · hoy se actualiza al marcar hábitos</small></div><div className="weeklyActions"><strong>{completion}%</strong><button onClick={() => setShowHistory(true)}>Ver resumen</button></div></header><div className="weekChart">{liveWeekProgress.map((value, index) => <div className={`${index === calendar.todayIndex ? 'todayBar' : ''} ${index > calendar.todayIndex ? 'futureBar' : ''}`} key={index}><span><i style={{ height: `${value}%` }} /></span><b>{calendar.days[index].day}<small>{calendar.days[index].date}</small></b></div>)}</div></article>
               <article className="activityBox generalBox"><header><div><b>▰ Pendientes generales</b><small>Ideas, compras y recordatorios sin fecha · sin XP ni monedas</small></div><button onClick={() => openItemModal('reminder')}>＋ Agregar</button></header><div className="reminderList">{reminderItems.map(([name, description, category], index) => <button className={doneReminders.includes(index) ? 'done' : ''} onClick={() => toggleReminder(index)} key={`${name}-${index}`}><i>{doneReminders.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><em className={`reminderTag ${category.toLowerCase()}`}>{category}</em><strong>⋮</strong></button>)}</div></article>
             </div>
@@ -485,12 +504,12 @@ export default function Home() {
               <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
             </article>
             <div className="profileBottom">
-              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>{formatMoney(Math.max(0, 1_000_000 - totalWorth))} de patrimonio</b></p><p><i>✦</i><b>{Math.max(0, 3500 - earnedXp).toLocaleString('es-MX')} XP</b></p></article>
+              <article className="missingCard"><span>TE FALTA:</span><p><i>$</i><b>{formatMoney(Math.max(0, nextRequirement.netWorth - totalWorth))} de patrimonio</b></p><p><i>✦</i><b>{Math.max(0, nextRequirement.xp - progression.generalXp).toLocaleString('es-MX')} XP general</b></p></article>
               <article className="rewardCard"><span>AL COMPLETAR TODOS LOS REQUISITOS</span><b>♕</b><h3>NIVEL DESBLOQUEADO</h3><p>Tu progreso queda guardado para siempre.</p><small>▣ Nivel guardado permanentemente</small></article>
             </div>
             <section className="moneyPanel" aria-label="Resumen de dinero y patrimonio">
               <header><div><span>▱</span><h2>MI DINERO</h2><p>Resumen simple de tu dinero y patrimonio.</p></div><b>♨</b></header>
-              <div className="moneyTotals"><article><span>▣ PATRIMONIO TOTAL</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Incluye patrimonio</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ PATRIMONIO</span><b>{formatMoney(assetsTotal)}</b><small>MXN</small><em>Valor de activos</em></article></div>
+              <div className="moneyTotals"><article><span>▣ PATRIMONIO NETO</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Activos menos deudas</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ ACTIVOS NETOS</span><b>{formatMoney(assetsTotal - debtTotal)}</b><small>MXN</small><em>Ahorros, inversiones y activos</em></article></div>
               <div className="moneyActions"><button onClick={() => openMoneyModal('income')}><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button onClick={() => openMoneyModal('expense')}><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button onClick={() => openMoneyModal('balance')}><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
               <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button onClick={() => openMoneyModal('transactions')}>Ver todo</button></header><p><span>Ingreso del mes</span><strong>{formatMoney(monthlyIncome)} ↑</strong></p><p><span>Gasto del mes</span><strong>−{formatMoney(monthlyExpense)} ↓</strong></p><p><span>Balance mensual</span><strong>{formatMoney(monthlyIncome - monthlyExpense)}</strong></p><p className="cashRow"><span>Dinero actual</span><strong>{formatMoney(cash)}</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button onClick={() => openMoneyModal('assets')}>Ver todo</button></header>{moneyAssets.length ? moneyAssets.slice(0, 3).map((asset) => <p key={asset.id}><i>◇</i><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)} <small>MXN</small></strong></p>) : <p className="emptyMoney">Aún no has registrado patrimonio.</p>}<button className="addAsset" onClick={() => openMoneyModal('asset')}>＋ Agregar patrimonio</button></article></div>
               <article className="moneyChart"><header><b>▥ DINERO GANADO {now.getFullYear()}</b><strong>▲ +{formatMoney(annualIncome)} este año</strong></header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{formatMoney(value)}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
@@ -498,10 +517,10 @@ export default function Home() {
           </section>
         ) : (
           <>
-            <section className="hero coverHero" style={{ backgroundImage: `url(${cover})` }} aria-label={completed ? 'Pantalla final del recorrido' : `Portada del nivel ${level}: ${levelNames[level - 1]}`}>
+            <section className="hero coverHero" style={{ backgroundImage: `url(${cover})` }} aria-label={completed ? 'Pantalla final del recorrido' : `Portada del nivel ${coverLevel}: ${LEVEL_NAMES[coverLevel - 1]}`}>
               <div className="coverShade" />
-              <button className="coverArrow left" onClick={() => completed ? setCompleted(false) : setLevel(Math.max(1, level - 1))} disabled={level === 1 && !completed} aria-label={completed ? 'Volver al nivel 40' : 'Nivel anterior'}>‹</button>
-              <div className="coverInfo"><span>{completed ? 'RECORRIDO COMPLETADO' : `NIVEL ${level} DE 40`}</span><b>{completed ? 'Felicidades, has ganado en la vida' : levelNames[level - 1]}</b></div>
+              <button className="coverArrow left" onClick={() => completed ? setCompleted(false) : setCoverLevel(Math.max(1, coverLevel - 1))} disabled={coverLevel === 1 && !completed} aria-label={completed ? 'Volver al nivel 40' : 'Nivel anterior'}>‹</button>
+              <div className="coverInfo"><span>{completed ? 'RECORRIDO COMPLETADO' : `NIVEL ${coverLevel} DE 40`}</span><b>{completed ? 'Felicidades, has ganado en la vida' : LEVEL_NAMES[coverLevel - 1]}</b></div>
             </section>
 
             <section className="skills" aria-label="Habilidades">
@@ -515,7 +534,7 @@ export default function Home() {
           </>
         )}
 
-        {moneyModal && <div className="modalBackdrop" role="presentation" onMouseDown={() => setMoneyModal(null)}><section className="itemModal moneyModal" role="dialog" aria-modal="true" aria-label="Registro de dinero" onMouseDown={(event) => event.stopPropagation()}><header><div><span>MI DINERO</span><h2>{moneyModal === 'income' ? 'Registrar ingreso' : moneyModal === 'expense' ? 'Registrar gasto' : moneyModal === 'balance' ? 'Ajustar dinero actual' : moneyModal === 'asset' ? 'Agregar patrimonio' : moneyModal === 'transactions' ? 'Todos los movimientos' : 'Todo mi patrimonio'}</h2></div><button onClick={() => setMoneyModal(null)} aria-label="Cerrar">×</button></header>{moneyModal === 'transactions' ? <div className="moneyDetailList">{moneyTransactions.length ? moneyTransactions.map((item) => <article key={item.id}><span><b>{item.concept}</b><small>{new Date(item.date).toLocaleDateString('es-MX')}</small></span><strong className={item.type}>{item.type === 'expense' ? '−' : '+'}{formatMoney(item.amount)}</strong></article>) : <p>No hay movimientos todavía.</p>}</div> : moneyModal === 'assets' ? <div className="moneyDetailList">{moneyAssets.length ? moneyAssets.map((asset) => <article key={asset.id}><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)}</strong></article>) : <p>No hay patrimonio registrado todavía.</p>}</div> : <><label>{moneyModal === 'asset' ? 'Nombre del patrimonio' : moneyModal === 'balance' ? 'Nota (opcional)' : 'Concepto'}<input autoFocus value={moneyConcept} onChange={(event) => setMoneyConcept(event.target.value)} placeholder={moneyModal === 'asset' ? 'Ej. Ahorros' : 'Ej. Venta del mes'} /></label><label>Cantidad MXN<input type="number" min="0" step="100" value={moneyAmount} onChange={(event) => setMoneyAmount(event.target.value)} placeholder="$0" /></label><button className="saveItem" onClick={saveMoney}>Guardar registro</button></>}</section></div>}
+        {moneyModal && <div className="modalBackdrop" role="presentation" onMouseDown={() => setMoneyModal(null)}><section className="itemModal moneyModal" role="dialog" aria-modal="true" aria-label="Registro de dinero" onMouseDown={(event) => event.stopPropagation()}><header><div><span>MI DINERO</span><h2>{moneyModal === 'income' ? 'Registrar ingreso' : moneyModal === 'expense' ? 'Registrar gasto' : moneyModal === 'balance' ? 'Ajustar dinero actual' : moneyModal === 'asset' ? 'Agregar patrimonio' : moneyModal === 'transactions' ? 'Todos los movimientos' : 'Todo mi patrimonio'}</h2></div><button onClick={() => setMoneyModal(null)} aria-label="Cerrar">×</button></header>{moneyModal === 'transactions' ? <div className="moneyDetailList">{moneyTransactions.length ? moneyTransactions.map((item) => <article key={item.id}><span><b>{item.concept}</b><small>{new Date(item.date).toLocaleDateString('es-MX')}</small></span><strong className={item.type}>{item.type === 'expense' ? '−' : '+'}{formatMoney(item.amount)}</strong></article>) : <p>No hay movimientos todavía.</p>}</div> : moneyModal === 'assets' ? <div className="moneyDetailList">{moneyAssets.length ? moneyAssets.map((asset) => <article key={asset.id}><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{asset.kind === 'debt' ? '−' : ''}{formatMoney(asset.value)}</strong></article>) : <p>No hay patrimonio registrado todavía.</p>}</div> : <><label>{moneyModal === 'asset' ? 'Nombre del patrimonio' : moneyModal === 'balance' ? 'Nota (opcional)' : 'Concepto'}<input autoFocus value={moneyConcept} onChange={(event) => setMoneyConcept(event.target.value)} placeholder={moneyModal === 'asset' ? 'Ej. Ahorros' : 'Ej. Venta del mes'} /></label><label>Cantidad MXN<input type="number" min="0" step="100" value={moneyAmount} onChange={(event) => setMoneyAmount(event.target.value)} placeholder="$0" /></label>{moneyModal === 'asset' && <fieldset><legend>Tipo</legend><div className="categoryOptions">{([['savings','Ahorro'],['investment','Inversión'],['asset','Activo'],['debt','Deuda']] as const).map(([kind, label]) => <button className={moneyAssetKind === kind ? 'selected' : ''} onClick={() => setMoneyAssetKind(kind)} key={kind}>{label}</button>)}</div></fieldset>}<button className="saveItem" onClick={saveMoney}>Guardar registro</button></>}</section></div>}
         {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : modalType === 'task' ? 'NUEVA TAREA' : 'NUEVO RECORDATORIO'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : modalType === 'task' ? 'Agregar pendiente' : 'Pendiente general'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label>{modalType === 'reminder' ? <fieldset><legend>Categoría</legend><div className="categoryOptions">{reminderCategories.map((category) => <button className={itemCategory === category ? 'selected' : ''} onClick={() => setItemCategory(category)} key={category}>{category}</button>)}</div><p className="noReward">Este recordatorio no otorga XP ni monedas.</p></fieldset> : <fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset>}<button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : modalType === 'task' ? 'tarea' : 'recordatorio'}</button></section></div>}
         {habitToDelete !== null && <div className="modalBackdrop" role="presentation" onMouseDown={() => setHabitToDelete(null)}><section className="deleteModal" role="alertdialog" aria-modal="true" aria-labelledby="delete-habit-title" onMouseDown={(event) => event.stopPropagation()}><span>ELIMINAR HÁBITO</span><h2 id="delete-habit-title">¿Quieres borrar “{activityItems[habitToDelete]?.[0]}”?</h2><p>El hábito dejará de aparecer en tu lista diaria.</p><div><button onClick={() => setHabitToDelete(null)}>Cancelar</button><button className="confirmDelete" onClick={deleteHabit}>Confirmar</button></div></section></div>}
         {showHistory && <div className="modalBackdrop" role="presentation" onMouseDown={() => setShowHistory(false)}><section className="historyModal" role="dialog" aria-modal="true" aria-label="Historial mensual de hábitos" onMouseDown={(event) => event.stopPropagation()}><header><div><span>HISTORIAL DE HÁBITOS</span><h2>{monthLabel}</h2></div><button onClick={() => setShowHistory(false)} aria-label="Cerrar">×</button></header><div className="monthControls"><button onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹ Mes anterior</button><p>El historial comienza el {new Date(`${historyStart}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p><button disabled={isCurrentMonth} onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Mes siguiente ›</button></div><div className="monthWeekdays">{['L','M','X','J','V','S','D'].map((day) => <b key={day}>{day}</b>)}</div><div className="monthGrid">{monthCalendar.map((cell, index) => cell ? <article className={`${cell.key === dayKey() ? 'today' : ''} ${cell.key < historyStart || cell.key > dayKey() ? 'emptyDay' : ''}`} key={cell.key}><span>{cell.day}</span>{activityHistory[cell.key] === undefined ? <small>—</small> : <><div><i style={{ height: `${activityHistory[cell.key]}%` }} /></div><b>{activityHistory[cell.key]}%</b></>}</article> : <i key={`empty-${index}`} />)}</div><footer><span><i /> Sin actividad</span><span><i /> Progreso registrado</span></footer></section></div>}
