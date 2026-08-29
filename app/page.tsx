@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 const levelNames = [
   'El inicio',
@@ -97,6 +97,98 @@ const initialIdeas = [
   { title: 'Estudio de marca personal', detail: 'Estrategia, diseño y contenido premium', tags: ['Diseño', 'Servicios'], status: 'Prioridad' },
   { title: 'Newsletter de oportunidades', detail: 'Ideas accionables de tecnología y negocios', tags: ['Contenido', 'Negocios'], status: 'Borrador' },
 ];
+
+type StudyTask = { name: string; done: boolean };
+type StudyModule = { name: string; tasks: StudyTask[] };
+type StudyTopic = { name: string; progress: number; locked?: boolean; modules: StudyModule[] };
+type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[] };
+
+const studyBranches: StudyBranch[] = [
+  { name: 'Marketing', icon: '📣', level: 5, tone: 'coral', topics: [
+    { name: 'Fundamentos de marketing', progress: 100, modules: [] },
+    { name: 'Cliente ideal', progress: 100, modules: [] },
+    { name: 'Oferta', progress: 100, modules: [] },
+    { name: 'Meta Ads', progress: 65, modules: [
+      { name: 'Fundamentos', tasks: [{ name: 'Entender el ecosistema de Meta', done: true }] },
+      { name: 'Estructura de campañas', tasks: [{ name: 'Crear estructura de prueba', done: true }] },
+      { name: 'Creativos', tasks: [{ name: 'Analizar 10 anuncios', done: true }] },
+      { name: 'Audiencias', tasks: [{ name: 'Ver video sobre públicos', done: true }, { name: 'Leer artículo sobre Advantage+', done: true }, { name: 'Investigar públicos Lookalike', done: false }, { name: 'Hacer prueba en campaña real', done: false }, { name: 'Escribir mis conclusiones', done: false }] },
+      { name: 'Optimización', tasks: [{ name: 'Definir métricas principales', done: false }] },
+      { name: 'Escalamiento', tasks: [{ name: 'Documentar reglas de escala', done: false }] },
+    ] },
+    { name: 'Copywriting', progress: 40, modules: [{ name: 'Mensajes que venden', tasks: [{ name: 'Escribir 10 titulares', done: true }, { name: 'Practicar PAS y AIDA', done: false }] }] },
+    { name: 'Google Ads', progress: 0, modules: [{ name: 'Primeros pasos', tasks: [{ name: 'Crear cuenta de práctica', done: false }] }] },
+    { name: 'Branding avanzado', progress: 0, locked: true, modules: [] },
+    { name: 'Analítica avanzada', progress: 0, locked: true, modules: [] },
+  ] },
+  { name: 'Tecnología / IA', icon: '💻', level: 4, tone: 'blue', topics: [{ name: 'Automatización', progress: 70, modules: [{ name: 'Flujos', tasks: [{ name: 'Crear primera automatización', done: true }, { name: 'Conectar herramientas', done: false }] }] }, { name: 'IA aplicada', progress: 45, modules: [] }, { name: 'Desarrollo web', progress: 30, modules: [] }] },
+  { name: 'Negocios', icon: '📊', level: 5, tone: 'gold', topics: [{ name: 'Modelo de negocio', progress: 80, modules: [] }, { name: 'Ventas', progress: 55, modules: [] }, { name: 'Operaciones', progress: 25, modules: [] }] },
+  { name: 'Finanzas', icon: '🪙', level: 3, tone: 'green', topics: [{ name: 'Finanzas personales', progress: 75, modules: [] }, { name: 'Inversión', progress: 35, modules: [] }, { name: 'Impuestos', progress: 10, modules: [] }] },
+  { name: 'Salud', icon: '🏋️', level: 3, tone: 'aqua', topics: [{ name: 'Entrenamiento', progress: 70, modules: [] }, { name: 'Nutrición', progress: 40, modules: [] }, { name: 'Sueño', progress: 45, modules: [] }] },
+  { name: 'Desarrollo personal', icon: '🧠', level: 4, tone: 'purple', topics: [{ name: 'Disciplina', progress: 80, modules: [] }, { name: 'Enfoque', progress: 60, modules: [] }, { name: 'Mentalidad', progress: 65, modules: [] }] },
+  { name: 'Diseño', icon: '🎨', level: 3, tone: 'pink', topics: [{ name: 'Diseño visual', progress: 55, modules: [] }, { name: 'Marca', progress: 35, modules: [] }, { name: 'UX/UI', progress: 20, modules: [] }] },
+  { name: 'Habilidades sociales', icon: '👥', level: 2, tone: 'orange', topics: [{ name: 'Comunicación', progress: 50, modules: [] }, { name: 'Negociación', progress: 25, modules: [] }, { name: 'Networking', progress: 20, modules: [] }] },
+];
+
+function StudyView() {
+  const [branches, setBranches] = useState(studyBranches);
+  const [branchIndex, setBranchIndex] = useState<number | null>(null);
+  const [topicIndex, setTopicIndex] = useState<number | null>(null);
+  const [query, setQuery] = useState('');
+  const [showSave, setShowSave] = useState(false);
+  const [material, setMaterial] = useState({ title: '', branch: 'Marketing', topic: 'Meta Ads', type: '🎥 Video' });
+  const [saved, setSaved] = useState<{ title: string; branch: string; topic: string; type: string }[]>([]);
+  const [studyReady, setStudyReady] = useState(false);
+
+  useEffect(() => {
+    try {
+      const storedBranches = JSON.parse(localStorage.getItem('daniel-os-study') || 'null');
+      const storedSaved = JSON.parse(localStorage.getItem('daniel-os-study-saved') || 'null');
+      if (storedBranches) setBranches(storedBranches);
+      if (storedSaved) setSaved(storedSaved);
+    } catch { /* Keep the starter curriculum. */ }
+    setStudyReady(true);
+  }, []);
+  useEffect(() => { if (studyReady) localStorage.setItem('daniel-os-study', JSON.stringify(branches)); }, [branches, studyReady]);
+  useEffect(() => { if (studyReady) localStorage.setItem('daniel-os-study-saved', JSON.stringify(saved)); }, [saved, studyReady]);
+
+  const selectedBranch = branchIndex === null ? null : branches[branchIndex];
+  const selectedTopic = selectedBranch && topicIndex !== null ? selectedBranch.topics[topicIndex] : null;
+  const completedTopics = branches.flatMap((branch) => branch.topics).filter((topic) => topic.progress === 100).length;
+  const totalTopics = branches.flatMap((branch) => branch.topics).length;
+  const overall = Math.round(branches.flatMap((branch) => branch.topics).reduce((sum, topic) => sum + topic.progress, 0) / totalTopics);
+  const visibleBranches = branches.map((branch, index) => ({ branch, index })).filter(({ branch }) => branch.name.toLowerCase().includes(query.toLowerCase()) || branch.topics.some((topic) => topic.name.toLowerCase().includes(query.toLowerCase())));
+  const openBranch = (index: number) => { setBranchIndex(index); setTopicIndex(null); };
+  const toggleStudyTask = (moduleIndex: number, taskIndex: number) => {
+    if (branchIndex === null || topicIndex === null) return;
+    setBranches((current) => current.map((branch, bi) => {
+      if (bi !== branchIndex) return branch;
+      return { ...branch, topics: branch.topics.map((topic, ti) => {
+        if (ti !== topicIndex) return topic;
+        const modules = topic.modules.map((module, mi) => mi !== moduleIndex ? module : { ...module, tasks: module.tasks.map((task, xi) => xi === taskIndex ? { ...task, done: !task.done } : task) });
+        const tasks = modules.flatMap((module) => module.tasks);
+        const progress = tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : topic.progress;
+        return { ...topic, modules, progress };
+      }) };
+    }));
+  };
+  const saveMaterial = () => {
+    if (!material.title.trim()) return;
+    setSaved((current) => [{ ...material, title: material.title.trim() }, ...current]);
+    setMaterial((current) => ({ ...current, title: '' }));
+    setShowSave(false);
+  };
+  const branchTopics = branches.find((branch) => branch.name === material.branch)?.topics.filter((topic) => !topic.locked) || [];
+
+  return <section className="studyView" aria-label="Panel de estudio">
+    <header className="studyHeader"><div><span>📖 PLAN DE ESTUDIOS</span><h1>Árbol de conocimiento</h1><p>Aprende hoy, construye la vida que quieres.</p></div><div className="studyTools"><label>⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar ramas o temas" /></label><button onClick={() => setShowSave(true)}>＋ Guardar para estudiar</button></div></header>
+    {selectedBranch ? <div className="coursePanel">
+      <button className="studyBack" onClick={() => topicIndex === null ? setBranchIndex(null) : setTopicIndex(null)}>‹ {topicIndex === null ? 'Volver al árbol' : selectedBranch.name}</button>
+      {selectedTopic ? <div className="topicCourse"><header><span>{selectedBranch.icon} {selectedBranch.name}</span><h2>{selectedTopic.name}</h2><div><i style={{ width: `${selectedTopic.progress}%` }} /></div><b>{selectedTopic.progress}% completado</b></header><div className="moduleList">{selectedTopic.modules.length ? selectedTopic.modules.map((module, moduleIndex) => { const done = module.tasks.length > 0 && module.tasks.every((task) => task.done); return <article key={module.name}><header><span>MÓDULO {moduleIndex + 1}</span><b>{module.name}</b><em>{done ? '✓ Completado' : module.tasks.some((task) => task.done) ? 'En progreso' : 'Pendiente'}</em></header>{module.tasks.map((task, taskIndex) => <button className={task.done ? 'done' : ''} onClick={() => toggleStudyTask(moduleIndex, taskIndex)} key={task.name}><i>{task.done ? '✓' : ''}</i><span>{task.name}</span></button>)}</article>; }) : <div className="emptyCourse"><b>Curso listo para crecer</b><p>Guarda videos, lecturas o prácticas para construir este tema.</p><button onClick={() => setShowSave(true)}>＋ Agregar material</button></div>}</div></div> : <><div className={`branchTitle ${selectedBranch.tone}`}><i>{selectedBranch.icon}</i><span><small>RAMA DE CONOCIMIENTO</small><h2>{selectedBranch.name}</h2><b>Nivel {selectedBranch.level}</b></span></div><div className="topicList">{selectedBranch.topics.map((topic, index) => <button disabled={topic.locked} onClick={() => setTopicIndex(index)} key={topic.name}><i>{topic.locked ? '🔒' : topic.progress === 100 ? '✓' : topic.progress > 0 ? '●' : '○'}</i><span><b>{topic.name}</b><small>{topic.locked ? 'Completa los temas anteriores' : topic.progress === 100 ? 'Completado' : topic.progress > 0 ? 'En curso' : 'Sin empezar'}</small></span>{!topic.locked && <><div><em style={{ width: `${topic.progress}%` }} /></div><strong>{topic.progress}%</strong></>}</button>)}</div></>}
+    </div> : <><div className="studyOverview"><article><div className="progressRing" style={{ '--progress': `${overall * 3.6}deg` } as CSSProperties}><b>{overall}%</b><span>completado</span></div><ul><li><i />Completados <b>{completedTopics}</b></li><li><i />En curso <b>{totalTopics - completedTopics}</b></li><li><i />Por aprender <b>{saved.length}</b></li></ul><p>“Un poco mejor cada día, grandes resultados con el tiempo.”</p></article><div className="knowledgeTree" style={{ backgroundImage: 'linear-gradient(#08051a22,#08051aaa),url(/study-tree.png)' }}>{visibleBranches.map(({ branch, index }) => { const progress = Math.round(branch.topics.reduce((sum, topic) => sum + topic.progress, 0) / branch.topics.length); return <button className={`treeNode node${index + 1} ${branch.tone}`} onClick={() => openBranch(index)} key={branch.name}><i>{branch.icon}</i><span><b>{branch.name}</b><small>Nivel {branch.level} · {progress}%</small><em><strong style={{ width: `${progress}%` }} /></em></span></button>; })}</div></div>{saved.length > 0 && <section className="studyInbox"><header><div><span>📥</span><h2>Pendiente por aprender</h2></div><b>{saved.length} guardados</b></header><div>{saved.map((item, index) => <article key={`${item.title}-${index}`}><i>{item.type.split(' ')[0]}</i><span><b>{item.title}</b><small>{item.branch} → {item.topic}</small></span><em>{item.type.replace(/^\S+\s/, '')}</em></article>)}</div></section>}</>}
+    {showSave && <div className="studyModalBackdrop" onMouseDown={() => setShowSave(false)}><section className="studyModal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><span>GUARDAR PARA ESTUDIAR</span><h2>Nuevo material</h2></div><button onClick={() => setShowSave(false)}>×</button></header><label>Título<input autoFocus value={material.title} onChange={(event) => setMaterial({ ...material, title: event.target.value })} placeholder="Ej. Cómo manejar objeciones" /></label><label>Rama<select value={material.branch} onChange={(event) => { const branch = branches.find((item) => item.name === event.target.value)!; setMaterial({ ...material, branch: branch.name, topic: branch.topics.find((topic) => !topic.locked)?.name || '' }); }}>{branches.map((branch) => <option key={branch.name}>{branch.name}</option>)}</select></label><label>Tema<select value={material.topic} onChange={(event) => setMaterial({ ...material, topic: event.target.value })}>{branchTopics.map((topic) => <option key={topic.name}>{topic.name}</option>)}</select></label><fieldset><legend>Tipo</legend><div>{['🎥 Video','📄 Artículo','📚 Libro','🧪 Práctica','📝 Nota'].map((type) => <button className={material.type === type ? 'selected' : ''} onClick={() => setMaterial({ ...material, type })} key={type}>{type}</button>)}</div></fieldset><button className="saveStudy" onClick={saveMaterial}>Guardar material</button></section></div>}
+  </section>;
+}
 
 const dayKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const reminderKey = (item: string[]) => item.join('|');
@@ -310,20 +402,8 @@ export default function Home() {
               {ideaItems.map((idea, index) => <article key={`${idea.title}-${index}`}><div className="ideaNumber">{String(index + 1).padStart(2, '0')}</div><div className="ideaCopy"><b>{idea.title}</b><p>{idea.detail}</p><div>{idea.tags.map((tag) => <span key={tag}>{tag}</span>)}</div></div><em>{idea.status}</em><button aria-label={`Ver detalles de ${idea.title}`}>›</button></article>)}
             </div>
           </section>
-        ) : active === 'Misiones' ? (
-          <section className="levelsView" aria-label="Portadas de niveles">
-            <div className="levelsHeading"><div><span>RECORRIDO</span><h1>40 niveles</h1></div><p>40 portadas disponibles · recorrido completo</p></div>
-            <div className="levelGrid">
-              {Array.from({ length: 40 }, (_, index) => {
-                const number = index + 1;
-                const unlocked = number <= 40;
-                return <button className={`levelCard ${unlocked ? '' : 'locked'} ${level === number ? 'selected' : ''}`} onClick={() => chooseLevel(number)} disabled={!unlocked} key={number} aria-label={unlocked ? `Abrir nivel ${number}: ${levelNames[index]}` : `Nivel ${number} bloqueado`}>
-                  {unlocked && <img src={`/levels/level-${String(number).padStart(2, '0')}.webp`} alt="" />}
-                  <span>{unlocked ? `NIVEL ${number}` : '🔒'}</span><b>{unlocked ? levelNames[index] : `Nivel ${number}`}</b>
-                </button>;
-              })}
-            </div>
-          </section>
+        ) : active === 'Estudio' ? (
+          <StudyView />
         ) : active === 'Actividades' ? (
           <section className="activitiesView" aria-label="Panel de actividades">
             <div className="activitiesHeading"><div><span>HOY · {calendar.date || 'FECHA ACTUAL'}</span><h1>Actividades</h1><p>Pequeñas acciones, grandes resultados.</p></div><div className="dailyScore"><b>{doneActivities.length}/{activityItems.length}</b><span>completadas</span></div></div>
@@ -386,7 +466,7 @@ export default function Home() {
         {showHistory && <div className="modalBackdrop" role="presentation" onMouseDown={() => setShowHistory(false)}><section className="historyModal" role="dialog" aria-modal="true" aria-label="Historial mensual de hábitos" onMouseDown={(event) => event.stopPropagation()}><header><div><span>HISTORIAL DE HÁBITOS</span><h2>{monthLabel}</h2></div><button onClick={() => setShowHistory(false)} aria-label="Cerrar">×</button></header><div className="monthControls"><button onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹ Mes anterior</button><p>El historial comienza el {new Date(`${historyStart}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p><button disabled={isCurrentMonth} onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Mes siguiente ›</button></div><div className="monthWeekdays">{['L','M','X','J','V','S','D'].map((day) => <b key={day}>{day}</b>)}</div><div className="monthGrid">{monthCalendar.map((cell, index) => cell ? <article className={`${cell.key === dayKey() ? 'today' : ''} ${cell.key < historyStart || cell.key > dayKey() ? 'emptyDay' : ''}`} key={cell.key}><span>{cell.day}</span>{activityHistory[cell.key] === undefined ? <small>—</small> : <><div><i style={{ height: `${activityHistory[cell.key]}%` }} /></div><b>{activityHistory[cell.key]}%</b></>}</article> : <i key={`empty-${index}`} />)}</div><footer><span><i /> Sin actividad</span><span><i /> Progreso registrado</span></footer></section></div>}
 
         <nav className="nav" aria-label="Navegación principal">
-          {['Ideas', 'Misiones'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '◎'}</span>{item}</button>)}
+          {['Ideas', 'Estudio'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '▤'}</span>{item}</button>)}
           <button className={`homeButton ${active === 'HOME' ? 'active' : ''}`} onClick={() => setActive('HOME')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
           {['Actividades', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Actividades' ? '▦' : '♙'}</span>{item}</button>)}
         </nav>

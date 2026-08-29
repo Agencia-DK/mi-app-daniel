@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import './money.css';
+@import './study.css';
 :root { color-scheme:dark; --purple:#9c6cff; --green:#35e88f; }
 * { box-sizing:border-box }
 body { margin:0; background:#030405; color:#f7f4ff; font-family:Arial,Helvetica,sans-serif }
