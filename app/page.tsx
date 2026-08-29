@@ -2,9 +2,9 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fullStudyBranches } from './study-data';
-import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, percentage, type ProgressionState } from './config/gameConfig';
+import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
 import { LEVEL_NAMES, requirementForLevel } from './config/levelConfig';
-import { XP_CONFIG, xpFromLabel } from './config/xpConfig';
+import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
 import { REWARD_CONFIG } from './config/rewardConfig';
 import { skillLevel } from './config/skillConfig';
 
@@ -30,17 +30,17 @@ const habits = [
 ];
 
 const dailyActivities = [
-  ['Tomar agua', '2 litros', '/icons/health.webp', '+20 XP'],
-  ['Entrenamiento', '45 minutos', '/icons/exercise.webp', '+50 XP'],
-  ['Estudiar', '1 hora', '/icons/study.webp', '+40 XP'],
-  ['Trabajo profundo', '2 horas', '/icons/work.webp', '+70 XP'],
-  ['Revisar finanzas', '15 minutos', '/icons/finance.webp', '+25 XP'],
-  ['Planear mañana', '10 minutos', '/icons/discipline.webp', '+20 XP'],
+  ['Tomar agua', '2 litros', '/icons/health.webp', '+5 XP'],
+  ['Entrenamiento', '45 minutos', '/icons/exercise.webp', '+15 XP'],
+  ['Estudiar', '1 hora', '/icons/study.webp', '+10 XP'],
+  ['Trabajo profundo', '2 horas', '/icons/work.webp', '+50 XP'],
+  ['Revisar finanzas', '15 minutos', '/icons/finance.webp', '+5 XP'],
+  ['Planear mañana', '10 minutos', '/icons/discipline.webp', '+5 XP'],
 ];
 
 const pendingActivities = [
-  ['Terminar propuesta', 'Trabajo', 'Alta', '+55 XP'],
-  ['Revisar campaña', 'Negocios', 'Alta', '+55 XP'],
+  ['Terminar propuesta', 'Trabajo', 'Difícil', '+70 XP'],
+  ['Revisar campaña', 'Negocios', 'Importante', '+40 XP'],
   ['Responder mensajes', 'Personal', 'Media', '+40 XP'],
   ['Preparar contenido', 'Estudio', 'Media', '+40 XP'],
   ['Organizar escritorio', 'Hábitos', 'Baja', '+5 XP'],
@@ -98,7 +98,7 @@ const studyBranches: StudyBranch[] = [
   { name: 'Habilidades sociales', icon: '👥', level: 2, tone: 'orange', topics: [{ name: 'Comunicación', progress: 50, modules: [] }, { name: 'Negociación', progress: 25, modules: [] }, { name: 'Networking', progress: 20, modules: [] }] },
 ];
 
-function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, done: boolean) => void; onKnowledgeSummary: (completed: number) => void }) {
+function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, taskId: string, reason: string, done: boolean) => void; onKnowledgeSummary: (completed: number) => void }) {
   const [branches, setBranches] = useState(fullStudyBranches);
   const [branchIndex, setBranchIndex] = useState<number | null>(null);
   const [topicIndex, setTopicIndex] = useState<number | null>(null);
@@ -130,7 +130,8 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
   const toggleStudyTask = (moduleIndex: number, taskIndex: number) => {
     if (branchIndex === null || topicIndex === null) return;
     const nextDone = !branches[branchIndex].topics[topicIndex].modules[moduleIndex].tasks[taskIndex].done;
-    onTaskToggled(branches[branchIndex].name, nextDone);
+    const task = branches[branchIndex].topics[topicIndex].modules[moduleIndex].tasks[taskIndex];
+    onTaskToggled(branches[branchIndex].name, `${branchIndex}:${topicIndex}:${moduleIndex}:${taskIndex}:${task.name}`, task.name, nextDone);
     setBranches((current) => current.map((branch, bi) => {
       if (bi !== branchIndex) return branch;
       let topics = branch.topics.map((topic, ti) => {
@@ -222,7 +223,7 @@ export default function Home() {
   const levelTierLabel = level >= 30 ? 'oro' : level >= 15 ? 'plata' : 'bronce';
   const completion = activityItems.length ? Math.round(doneActivities.length / activityItems.length * 100) : 0;
   const taskCompletion = taskItems.length ? Math.round(doneTasks.length / taskItems.length * 100) : 0;
-  const todayXp = doneActivities.reduce((total, index) => total + xpFromLabel(activityItems[index]?.[3]), 0) + doneTasks.reduce((total, index) => total + xpFromLabel(taskItems[index]?.[3]), 0);
+  const todayXp = progression.xpHistory.filter((entry) => entry.date === dayKey()).reduce((total, entry) => total + entry.amount, 0);
   const dayCompletion = Math.round((completion + taskCompletion) / 2);
   const liveWeekProgress = weekProgress.map((value, index) => index > calendar.todayIndex ? 0 : index === calendar.todayIndex ? completion : value);
   const monthCalendar = buildMonth(historyMonth);
@@ -292,8 +293,11 @@ export default function Home() {
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.progression) || 'null') as Partial<ProgressionState> | null;
-      if (saved) setProgression({ ...INITIAL_PROGRESSION, ...saved, skillXp: saved.skillXp || {}, learningByDay: saved.learningByDay || {}, stabilityByDay: saved.stabilityByDay || {} });
+      const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.progression) || localStorage.getItem('daniel-os-progression-v1') || 'null') as Partial<ProgressionState> | null;
+      if (saved) setProgression({ ...INITIAL_PROGRESSION, ...saved,
+        skillXp: saved.skillXp || {}, learningByDay: saved.learningByDay || {}, stabilityByDay: saved.stabilityByDay || {},
+        habitDays: saved.habitDays || {}, dailyGeneralXp: saved.dailyGeneralXp || {}, activeXpAwards: saved.activeXpAwards || [],
+        claimedRewards: saved.claimedRewards || [], xpHistory: saved.xpHistory || [] });
     } catch { /* El sistema comienza en cero. */ }
     setProgressionReady(true);
   }, []);
@@ -342,6 +346,50 @@ export default function Home() {
   }, [progressionReady, storageReady, moneyReady, completion, taskCompletion, healthCompletion, monthlyIncome, monthlyExpense, progression.learningByDay[dayKey()]]);
 
   useEffect(() => {
+    if (!progressionReady || !storageReady) return;
+    setProgression((current) => {
+      const habitDays = { ...current.habitDays, [dayKey()]: { done: doneActivities.length, total: activityItems.length } };
+      const streak = habitStreak(habitDays, new Date());
+      return current.streak === streak && current.habitDays[dayKey()]?.done === doneActivities.length && current.habitDays[dayKey()]?.total === activityItems.length
+        ? current : { ...current, habitDays, streak };
+    });
+  }, [progressionReady, storageReady, doneActivities.length, activityItems.length]);
+
+  useEffect(() => {
+    if (!progressionReady) return;
+    setProgression((current) => {
+      let next = current;
+      let changed = false;
+      for (const [daysText, amount] of Object.entries(XP_CONFIG.streaks)) {
+        const days = Number(daysText);
+        const id = `streak:${days}`;
+        if (current.streak < days || next.claimedRewards.includes(id)) continue;
+        next = grantXp(next, { id, date: dayKey(), general: amount, reason: `Racha de ${days} días`, type: 'streak' });
+        next = { ...next, claimedRewards: [...next.claimedRewards, id] };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [progressionReady, progression.streak]);
+
+  useEffect(() => {
+    if (!progressionReady || !moneyReady) return;
+    setProgression((current) => {
+      let next = current;
+      let changed = false;
+      for (const [worthText, amount] of Object.entries(XP_CONFIG.financialMilestones)) {
+        const worth = Number(worthText);
+        const id = `patrimonio:${worth}`;
+        if (totalWorth < worth || next.claimedRewards.includes(id)) continue;
+        next = grantXp(next, { id, date: dayKey(), general: amount, reason: `Hito de patrimonio: ${formatMoney(worth)}`, type: 'financial' });
+        next = { ...next, claimedRewards: [...next.claimedRewards, id] };
+        changed = true;
+      }
+      return changed ? next : current;
+    });
+  }, [progressionReady, moneyReady, totalWorth]);
+
+  useEffect(() => {
     if (!storageReady) return;
     const removeExpired = () => {
       const expired = Object.entries(reminderExpiry).filter(([, expires]) => expires <= Date.now()).map(([key]) => key);
@@ -373,23 +421,36 @@ export default function Home() {
 
   useEffect(() => { setCoverLevel(level); }, [level]);
 
-  const changeGeneralXp = (amount: number) => setProgression((current) => ({ ...current, generalXp: Math.max(0, current.generalXp + amount) }));
+  const activityReward = (index: number): XpReward => {
+    const item = activityItems[index];
+    const isDeepWork = /trabajo profundo/i.test(item?.[0] || '');
+    const hours = Number((item?.[1] || '').match(/\d+/)?.[0] || 0);
+    return { id: `${dayKey()}:${isDeepWork ? 'deep' : 'habit'}:${item?.[0]}:${item?.[1]}`, date: dayKey(),
+      general: isDeepWork ? Math.min(XP_CONFIG.deepWork.dailyLimit, Math.floor(hours) * XP_CONFIG.deepWork.perFullHour) : normalizedHabitXp(xpFromLabel(item?.[3])),
+      reason: item?.[0] || 'Hábito', type: isDeepWork ? 'deep_work' : 'habit' };
+  };
+  const taskReward = (index: number): XpReward => {
+    const item = taskItems[index];
+    return { id: `${dayKey()}:task:${item?.[0]}:${item?.[1]}`, date: dayKey(), general: normalizedTaskXp(xpFromLabel(item?.[3])), reason: item?.[0] || 'Tarea', type: 'task' };
+  };
   const toggleActivity = (index: number) => {
     const done = doneActivities.includes(index);
-    changeGeneralXp((done ? -1 : 1) * xpFromLabel(activityItems[index]?.[3]));
+    const reward = activityReward(index);
+    setProgression((current) => done ? revokeXp(current, reward) : grantXp(current, reward));
     setDoneActivities((current) => done ? current.filter((item) => item !== index) : [...current, index]);
   };
   const toggleTask = (index: number) => {
     const done = doneTasks.includes(index);
-    changeGeneralXp((done ? -1 : 1) * xpFromLabel(taskItems[index]?.[3]));
+    const reward = taskReward(index);
+    setProgression((current) => done ? revokeXp(current, reward) : grantXp(current, reward));
     setDoneTasks((current) => done ? current.filter((item) => item !== index) : [...current, index]);
   };
-  const toggleStudyProgress = (branch: string, done: boolean) => setProgression((current) => ({
-    ...current,
-    generalXp: Math.max(0, current.generalXp + (done ? XP_CONFIG.studyTask.general : -XP_CONFIG.studyTask.general)),
-    skillXp: { ...current.skillXp, [branch]: Math.max(0, (current.skillXp[branch] || 0) + (done ? XP_CONFIG.studyTask.skill : -XP_CONFIG.studyTask.skill)) },
-    learningByDay: { ...current.learningByDay, [dayKey()]: Math.max(0, (current.learningByDay[dayKey()] || 0) + (done ? 1 : -1)) },
-  }));
+  const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean) => setProgression((current) => {
+    const study = XP_CONFIG.study.videoShort;
+    const reward: XpReward = { id: `study:${taskId}`, date: dayKey(), general: study.general, reason, type: 'study', skill: branch, skillAmount: study.skill };
+    const next = done ? grantXp(current, reward) : revokeXp(current, reward);
+    return { ...next, learningByDay: { ...next.learningByDay, [dayKey()]: Math.max(0, (next.learningByDay[dayKey()] || 0) + (done ? 1 : -1)) } };
+  });
   const toggleReminder = (index: number) => {
     const key = reminderKey(reminderItems[index]);
     if (doneReminders.includes(index)) {
@@ -402,6 +463,10 @@ export default function Home() {
   };
   const deleteHabit = () => {
     if (habitToDelete === null) return;
+    if (doneActivities.includes(habitToDelete)) {
+      const reward = activityReward(habitToDelete);
+      setProgression((current) => revokeXp(current, reward));
+    }
     setActivityItems((current) => current.filter((_, index) => index !== habitToDelete));
     setDoneActivities((current) => current.filter((index) => index !== habitToDelete).map((index) => index > habitToDelete ? index - 1 : index));
     setHabitToDelete(null);
