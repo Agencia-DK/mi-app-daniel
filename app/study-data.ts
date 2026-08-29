@@ -1,4 +1,4 @@
-export type StudyTask = { name: string; done: boolean };
+export type StudyTask = { name: string; done: boolean; xpAwarded?: boolean };
 export type StudyModule = { name: string; tasks: StudyTask[] };
 export type StudyTopic = { name: string; progress: number; locked?: boolean; modules: StudyModule[] };
 export type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[] };

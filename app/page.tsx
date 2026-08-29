@@ -5,7 +5,7 @@ import { fullStudyBranches } from './study-data';
 import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
 import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from './config/levelConfig';
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
-import { skillLevel } from './config/skillConfig';
+import { knowledgeLevelGeneralXp, skillLevel, skillLevelXp, skillXpForTheme } from './config/skillConfig';
 import { REWARD_CONFIG } from './config/rewardConfig';
 import { STABILITY_CONFIG, financialStability, stabilityClassification, stabilityWindowDaysForLevel } from './config/stabilityConfig';
 
@@ -67,7 +67,7 @@ const initialIdeas = [
   { title: 'Newsletter de oportunidades', detail: 'Ideas accionables de tecnología y negocios', tags: ['Contenido', 'Negocios'], status: 'Borrador' },
 ];
 
-type StudyTask = { name: string; done: boolean };
+type StudyTask = { name: string; done: boolean; xpAwarded?: boolean };
 type StudyModule = { name: string; tasks: StudyTask[] };
 type StudyTopic = { name: string; progress: number; locked?: boolean; modules: StudyModule[] };
 type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[] };
@@ -99,7 +99,7 @@ const studyBranches: StudyBranch[] = [
   { name: 'Habilidades sociales', icon: '👥', level: 2, tone: 'orange', topics: [{ name: 'Comunicación', progress: 50, modules: [] }, { name: 'Negociación', progress: 25, modules: [] }, { name: 'Networking', progress: 20, modules: [] }] },
 ];
 
-function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, taskId: string, reason: string, done: boolean) => void; onKnowledgeSummary: (completed: number) => void }) {
+function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number) => void; onKnowledgeSummary: (completed: number) => void }) {
   const [branches, setBranches] = useState(fullStudyBranches);
   const [branchIndex, setBranchIndex] = useState<number | null>(null);
   const [topicIndex, setTopicIndex] = useState<number | null>(null);
@@ -113,7 +113,17 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
     try {
       const storedBranches = JSON.parse(localStorage.getItem('daniel-os-study-v2') || 'null');
       const storedSaved = JSON.parse(localStorage.getItem('daniel-os-study-saved') || 'null');
-      if (storedBranches) setBranches(storedBranches);
+      if (storedBranches) setBranches(storedBranches.map((branch: StudyBranch) => ({
+        ...branch,
+        topics: branch.topics.map((topic, index) => ({
+          ...topic,
+          locked: index > 0 && branch.topics[index - 1].progress < 100,
+          modules: topic.modules.map((module) => ({
+            ...module,
+            tasks: module.tasks.map((task) => ({ ...task, xpAwarded: task.xpAwarded ?? task.done })),
+          })),
+        })),
+      })));
       if (storedSaved) setSaved(storedSaved);
     } catch { /* Keep the starter curriculum. */ }
     setStudyReady(true);
@@ -130,14 +140,21 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
   const openBranch = (index: number) => { setBranchIndex(index); setTopicIndex(null); };
   const toggleStudyTask = (moduleIndex: number, taskIndex: number) => {
     if (branchIndex === null || topicIndex === null) return;
-    const nextDone = !branches[branchIndex].topics[topicIndex].modules[moduleIndex].tasks[taskIndex].done;
-    const task = branches[branchIndex].topics[topicIndex].modules[moduleIndex].tasks[taskIndex];
-    onTaskToggled(branches[branchIndex].name, `${branchIndex}:${topicIndex}:${moduleIndex}:${taskIndex}:${task.name}`, task.name, nextDone);
+    const branch = branches[branchIndex];
+    const topic = branch.topics[topicIndex];
+    if (topic.locked) return;
+    const task = topic.modules[moduleIndex].tasks[taskIndex];
+    const nextDone = !task.done;
+    const allTasks = topic.modules.flatMap((module) => module.tasks);
+    const themeIndex = topic.modules.slice(0, moduleIndex).reduce((sum, module) => sum + module.tasks.length, 0) + taskIndex;
+    const skillAmount = nextDone && !task.xpAwarded ? skillXpForTheme(topicIndex + 1, themeIndex, allTasks.length) : 0;
+    const willComplete = nextDone && allTasks.every((item) => item === task || item.done);
+    onTaskToggled(branch.name, `${branchIndex}:${topicIndex}:${moduleIndex}:${taskIndex}:${task.name}`, task.name, nextDone, skillAmount, willComplete ? topicIndex + 1 : undefined);
     setBranches((current) => current.map((branch, bi) => {
       if (bi !== branchIndex) return branch;
       let topics = branch.topics.map((topic, ti) => {
         if (ti !== topicIndex) return topic;
-        const modules = topic.modules.map((module, mi) => mi !== moduleIndex ? module : { ...module, tasks: module.tasks.map((task, xi) => xi === taskIndex ? { ...task, done: !task.done } : task) });
+        const modules = topic.modules.map((module, mi) => mi !== moduleIndex ? module : { ...module, tasks: module.tasks.map((task, xi) => xi === taskIndex ? { ...task, done: !task.done, xpAwarded: task.xpAwarded || !task.done } : task) });
         const tasks = modules.flatMap((module) => module.tasks);
         const progress = tasks.length ? Math.round(tasks.filter((task) => task.done).length / tasks.length * 100) : topic.progress;
         return { ...topic, modules, progress };
@@ -146,6 +163,7 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
       const completedLevels = topics.filter((topic) => topic.progress === 100).length;
       return { ...branch, topics, level: Math.min(topics.length, completedLevels + 1) };
     }));
+    if (willComplete) window.setTimeout(() => window.alert(`NIVEL COMPLETADO\n\n${branch.name}\nNivel ${topicIndex + 1} completado\n\n+${skillLevelXp(Math.min(20, topicIndex + 2))} XP total conseguido${topicIndex < branch.topics.length - 1 ? `\n\nNIVEL ${topicIndex + 2} DESBLOQUEADO` : ''}`), 0);
   };
   useEffect(() => { if (studyReady) onKnowledgeSummary(completedTopics); }, [studyReady, completedTopics]);
   const saveMaterial = () => {
@@ -160,9 +178,9 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
     <header className="studyHeader"><div><span>📖 PLAN DE ESTUDIOS</span><h1>Árbol de conocimiento</h1><p>Aprende hoy, construye la vida que quieres.</p></div><div className="studyTools"><label>⌕<input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar ramas o temas" /></label><button onClick={() => setShowSave(true)}>＋ Guardar para estudiar</button></div></header>
     {selectedBranch ? <div className="coursePanel">
       <button className="studyBack" onClick={() => topicIndex === null ? setBranchIndex(null) : setTopicIndex(null)}>‹ {topicIndex === null ? 'Volver al árbol' : selectedBranch.name}</button>
-      <small>{selectedBranch.name}: {skillXp[selectedBranch.name] || 0} XP · Nivel {skillLevel(skillXp[selectedBranch.name] || 0)}</small>
+      <small>{selectedBranch.name}: {Math.round(skillXp[selectedBranch.name] || 0)} XP · Nivel {skillLevel(skillXp[selectedBranch.name] || 0)}</small>
       {selectedTopic ? <div className="topicCourse"><header><span>{selectedBranch.icon} {selectedBranch.name}</span><h2>{selectedTopic.name}</h2><div><i style={{ width: `${selectedTopic.progress}%` }} /></div><b>{selectedTopic.progress}% completado</b></header><div className="moduleList">{selectedTopic.modules.length ? selectedTopic.modules.map((module, moduleIndex) => { const done = module.tasks.length > 0 && module.tasks.every((task) => task.done); return <article key={module.name}><header><span>MÓDULO {moduleIndex + 1}</span><b>{module.name}</b><em>{done ? '✓ Completado' : module.tasks.some((task) => task.done) ? 'En progreso' : 'Pendiente'}</em></header>{module.tasks.map((task, taskIndex) => <button className={task.done ? 'done' : ''} onClick={() => toggleStudyTask(moduleIndex, taskIndex)} key={task.name}><i>{task.done ? '✓' : ''}</i><span>{task.name}</span></button>)}</article>; }) : <div className="emptyCourse"><b>Curso listo para crecer</b><p>Guarda videos, lecturas o prácticas para construir este tema.</p><button onClick={() => setShowSave(true)}>＋ Agregar material</button></div>}</div></div> : <><div className={`branchTitle ${selectedBranch.tone}`}><i>{selectedBranch.icon}</i><span><small>RAMA DE CONOCIMIENTO</small><h2>{selectedBranch.name}</h2><b>Nivel {selectedBranch.level}</b></span></div><div className="topicList">{selectedBranch.topics.map((topic, index) => <button disabled={topic.locked} onClick={() => setTopicIndex(index)} key={topic.name}><i>{topic.locked ? '🔒' : topic.progress === 100 ? '✓' : topic.progress > 0 ? '●' : '○'}</i><span><b>{topic.name}</b><small>{topic.locked ? 'Completa los temas anteriores' : topic.progress === 100 ? 'Completado' : topic.progress > 0 ? 'En curso' : 'Sin empezar'}</small></span>{!topic.locked && <><div><em style={{ width: `${topic.progress}%` }} /></div><strong>{topic.progress}%</strong></>}</button>)}</div></>}
-    </div> : <><div className="studyOverview"><article><div className="progressRing" style={{ '--progress': `${overall * 3.6}deg` } as CSSProperties}><b>{overall}%</b><span>completado</span></div><ul><li><i />Completados <b>{completedTopics}</b></li><li><i />En curso <b>{totalTopics - completedTopics}</b></li><li><i />Por aprender <b>{saved.length}</b></li></ul><p>“Un poco mejor cada día, grandes resultados con el tiempo.”</p></article><div className="knowledgeTree" style={{ backgroundImage: 'linear-gradient(#08051a22,#08051aaa),url(/study-tree.png)' }}>{visibleBranches.map(({ branch, index }) => { const progress = Math.round(branch.topics.reduce((sum, topic) => sum + topic.progress, 0) / branch.topics.length); return <button className={`treeNode node${index + 1} ${branch.tone}`} onClick={() => openBranch(index)} key={branch.name}><i>{branch.icon}</i><span><b>{branch.name}</b><small>Nivel {branch.level} · {progress}%</small><em><strong style={{ width: `${progress}%` }} /></em></span></button>; })}</div></div>{saved.length > 0 && <section className="studyInbox"><header><div><span>📥</span><h2>Pendiente por aprender</h2></div><b>{saved.length} guardados</b></header><div>{saved.map((item, index) => <article key={`${item.title}-${index}`}><i>{item.type.split(' ')[0]}</i><span><b>{item.title}</b><small>{item.branch} → {item.topic}</small></span><em>{item.type.replace(/^\S+\s/, '')}</em></article>)}</div></section>}</>}
+    </div> : <><div className="studyOverview"><article><div className="progressRing" style={{ '--progress': `${overall * 3.6}deg` } as CSSProperties}><b>{overall}%</b><span>completado</span></div><ul><li><i />Completados <b>{completedTopics}</b></li><li><i />En curso <b>{totalTopics - completedTopics}</b></li><li><i />Por aprender <b>{saved.length}</b></li></ul><p>“Un poco mejor cada día, grandes resultados con el tiempo.”</p></article><div className="knowledgeTree" style={{ backgroundImage: 'linear-gradient(#08051a22,#08051aaa),url(/study-tree.png)' }}>{visibleBranches.map(({ branch, index }) => { const progress = branch.topics[Math.min(branch.level - 1, branch.topics.length - 1)]?.progress || 0; return <button className={`treeNode node${index + 1} ${branch.tone}`} onClick={() => openBranch(index)} key={branch.name}><i>{branch.icon}</i><span><b>{branch.name}</b><small>Nivel {branch.level} · {progress}%</small><em><strong style={{ width: `${progress}%` }} /></em></span></button>; })}</div></div>{saved.length > 0 && <section className="studyInbox"><header><div><span>📥</span><h2>Pendiente por aprender</h2></div><b>{saved.length} guardados</b></header><div>{saved.map((item, index) => <article key={`${item.title}-${index}`}><i>{item.type.split(' ')[0]}</i><span><b>{item.title}</b><small>{item.branch} → {item.topic}</small></span><em>{item.type.replace(/^\S+\s/, '')}</em></article>)}</div></section>}</>}
     {showSave && <div className="studyModalBackdrop" onMouseDown={() => setShowSave(false)}><section className="studyModal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><span>GUARDAR PARA ESTUDIAR</span><h2>Nuevo material</h2></div><button onClick={() => setShowSave(false)}>×</button></header><label>Título<input autoFocus value={material.title} onChange={(event) => setMaterial({ ...material, title: event.target.value })} placeholder="Ej. Cómo manejar objeciones" /></label><label>Rama<select value={material.branch} onChange={(event) => { const branch = branches.find((item) => item.name === event.target.value)!; setMaterial({ ...material, branch: branch.name, topic: branch.topics.find((topic) => !topic.locked)?.name || '' }); }}>{branches.map((branch) => <option key={branch.name}>{branch.name}</option>)}</select></label><label>Tema<select value={material.topic} onChange={(event) => setMaterial({ ...material, topic: event.target.value })}>{branchTopics.map((topic) => <option key={topic.name}>{topic.name}</option>)}</select></label><fieldset><legend>Tipo</legend><div>{['🎥 Video','📄 Artículo','📚 Libro','🧪 Práctica','📝 Nota'].map((type) => <button className={material.type === type ? 'selected' : ''} onClick={() => setMaterial({ ...material, type })} key={type}>{type}</button>)}</div></fieldset><button className="saveStudy" onClick={saveMaterial}>Guardar material</button></section></div>}
   </section>;
 }
@@ -466,10 +484,9 @@ export default function Home() {
     setProgression((current) => done ? revokeXp(current, reward) : grantXp(current, reward));
     setDoneTasks((current) => done ? current.filter((item) => item !== index) : [...current, index]);
   };
-  const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean) => setProgression((current) => {
-    const study = XP_CONFIG.study.videoShort;
-    const reward: XpReward = { id: `study:${taskId}`, date: dayKey(), general: study.general, reason, type: 'study', skill: branch, skillAmount: study.skill };
-    const next = done ? grantXp(current, reward) : revokeXp(current, reward);
+  const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number) => setProgression((current) => {
+    let next = skillAmount > 0 ? grantXp(current, { id: `knowledge-theme:${taskId}`, date: dayKey(), general: 0, reason, type: 'special', skill: branch, skillAmount }) : current;
+    if (completedLevel) next = grantXp(next, { id: `knowledge-level:${branch}:${completedLevel}`, date: dayKey(), general: knowledgeLevelGeneralXp(completedLevel), reason: `${branch}: Nivel ${completedLevel} completado`, type: 'special' });
     return { ...next, learningByDay: { ...next.learningByDay, [dayKey()]: Math.max(0, (next.learningByDay[dayKey()] || 0) + (done ? 1 : -1)) } };
   });
   const toggleReminder = (index: number) => {
