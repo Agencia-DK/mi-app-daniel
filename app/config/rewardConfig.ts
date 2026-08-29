@@ -1,5 +1,4 @@
 export const REWARD_CONFIG = {
-  levelUpCoins: 0,
   bossLevels: {
     10: { label: 'Completar 3 temas de conocimiento', completedKnowledgeTopics: 3 },
     20: { label: 'Completar 8 temas de conocimiento', completedKnowledgeTopics: 8 },

@@ -2,11 +2,12 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fullStudyBranches } from './study-data';
-import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
+import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantCoins, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
 import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from './config/levelConfig';
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
 import { knowledgeLevelGeneralXp, skillLevel, skillLevelXp, skillXpForTheme } from './config/skillConfig';
 import { REWARD_CONFIG } from './config/rewardConfig';
+import { COIN_CONFIG, coinRewardForScore } from './config/coinConfig';
 import { STABILITY_CONFIG, financialStability, stabilityClassification, stabilityWindowDaysForLevel } from './config/stabilityConfig';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
@@ -186,6 +187,8 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
 }
 
 const dayKey = (date = new Date()) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+const dateFromKey = (key: string) => new Date(`${key}T12:00:00`);
+const weekKey = (date: Date) => { const monday = new Date(date); monday.setDate(date.getDate() - ((date.getDay() + 6) % 7)); return dayKey(monday); };
 const reminderKey = (item: string[]) => item.join('|');
 const buildMonth = (month: Date) => {
   const year = month.getFullYear();
@@ -407,9 +410,40 @@ export default function Home() {
         next = { ...next, claimedRewards: [...next.claimedRewards, id] };
         changed = true;
       }
+      for (const [daysText, amount] of Object.entries(COIN_CONFIG.streaks)) {
+        const days = Number(daysText);
+        const updated = current.streak >= days ? grantCoins(next, `coins:streak:${days}`, amount) : next;
+        if (updated !== next) { next = updated; changed = true; }
+      }
       return changed ? next : current;
     });
   }, [progressionReady, progression.streak]);
+
+  useEffect(() => {
+    if (!progressionReady) return;
+    setProgression((current) => {
+      let next = current;
+      const today = dayKey();
+      const weeks = new Map<string, number>();
+      const months = new Map<string, number>();
+      Object.entries(current.stabilityByDay).forEach(([key, scores]) => {
+        if (key >= today) return;
+        next = grantCoins(next, `coins:day:${key}`, coinRewardForScore('daily', scores.productivity));
+        weeks.set(weekKey(dateFromKey(key)), (weeks.get(weekKey(dateFromKey(key))) || 0) + scores.productivity);
+        const month = key.slice(0, 7);
+        months.set(month, (months.get(month) || 0) + scores.productivity);
+      });
+      weeks.forEach((sum, key) => {
+        const end = dateFromKey(key); end.setDate(end.getDate() + 6);
+        if (dayKey(end) < today) next = grantCoins(next, `coins:week:${key}`, coinRewardForScore('weekly', Math.round(sum / 7)));
+      });
+      months.forEach((sum, key) => {
+        const [year, month] = key.split('-').map(Number);
+        if (key < today.slice(0, 7)) next = grantCoins(next, `coins:month:${key}`, coinRewardForScore('monthly', Math.round(sum / new Date(year, month, 0).getDate())));
+      });
+      return next;
+    });
+  }, [progressionReady, progression.stabilityByDay]);
 
   useEffect(() => {
     if (!progressionReady || !moneyReady) return;
@@ -427,6 +461,24 @@ export default function Home() {
       return changed ? next : current;
     });
   }, [progressionReady, moneyReady, totalWorth]);
+
+  useEffect(() => {
+    if (!progressionReady || !moneyReady) return;
+    setProgression((current) => {
+      let next = current;
+      const closedMonths = [...new Set(moneyTransactions.map((item) => item.date.slice(0, 7)))].filter((month) => month < currentMonth);
+      const incomeTarget = requirementForLevel(Math.min(current.highestLevelUnlocked + 1, GAME_CONFIG.maxLevel)).netMonthlyIncome;
+      closedMonths.forEach((month) => {
+        const transactions = moneyTransactions.filter((item) => item.date.startsWith(month));
+        const income = transactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0);
+        const expenses = transactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0);
+        const net = income - expenses;
+        if (incomeTarget > 0 && net >= incomeTarget) next = grantCoins(next, `coins:income-goal:${month}`, COIN_CONFIG.monthlyIncomeGoal);
+        if (income > 0 && net / income >= STABILITY_CONFIG.finances.savingsRateTarget) next = grantCoins(next, `coins:savings-goal:${month}`, COIN_CONFIG.monthlySavingsGoal);
+      });
+      return next;
+    });
+  }, [progressionReady, moneyReady, moneyTransactions, currentMonth]);
 
   useEffect(() => {
     if (!storageReady) return;
@@ -486,7 +538,10 @@ export default function Home() {
   };
   const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number) => setProgression((current) => {
     let next = skillAmount > 0 ? grantXp(current, { id: `knowledge-theme:${taskId}`, date: dayKey(), general: 0, reason, type: 'special', skill: branch, skillAmount }) : current;
-    if (completedLevel) next = grantXp(next, { id: `knowledge-level:${branch}:${completedLevel}`, date: dayKey(), general: knowledgeLevelGeneralXp(completedLevel), reason: `${branch}: Nivel ${completedLevel} completado`, type: 'special' });
+    if (completedLevel) {
+      next = grantXp(next, { id: `knowledge-level:${branch}:${completedLevel}`, date: dayKey(), general: knowledgeLevelGeneralXp(completedLevel), reason: `${branch}: Nivel ${completedLevel} completado`, type: 'special' });
+      next = grantCoins(next, `coins:skill-level:${branch}:${completedLevel}`, COIN_CONFIG.skillLevelMilestones[completedLevel as keyof typeof COIN_CONFIG.skillLevelMilestones] || 0);
+    }
     return { ...next, learningByDay: { ...next.learningByDay, [dayKey()]: Math.max(0, (next.learningByDay[dayKey()] || 0) + (done ? 1 : -1)) } };
   });
   const toggleReminder = (index: number) => {
@@ -564,7 +619,7 @@ export default function Home() {
   useEffect(() => {
     if (!progressionReady || !canLevelUp) return;
     const unlocked = Math.min(GAME_CONFIG.maxLevel, level + 1);
-    setProgression((current) => ({ ...current, level: unlocked, highestLevelUnlocked: Math.max(current.highestLevelUnlocked, unlocked) }));
+    setProgression((current) => grantCoins({ ...current, level: unlocked, highestLevelUnlocked: Math.max(current.highestLevelUnlocked, unlocked) }, `coins:general-level:${unlocked}`, unlocked * COIN_CONFIG.generalLevelMultiplier));
     setUnlockedLevel(unlocked);
   }, [progressionReady, canLevelUp, level]);
 

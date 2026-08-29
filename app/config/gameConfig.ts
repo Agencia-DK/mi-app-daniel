@@ -56,6 +56,11 @@ export const grantXp = (state: ProgressionState, reward: XpReward) => {
     xpHistory: general ? [...state.xpHistory, { id: reward.id, date: reward.date, amount: general, reason: reward.reason, type: reward.type, ...(reward.skill ? { skill: reward.skill } : {}) }] : state.xpHistory };
 };
 
+export const grantCoins = (state: ProgressionState, id: string, amount: number) =>
+  amount > 0 && !state.claimedRewards.includes(id)
+    ? { ...state, coins: state.coins + amount, claimedRewards: [...state.claimedRewards, id] }
+    : state;
+
 export const revokeXp = (state: ProgressionState, reward: XpReward) => {
   if (!state.activeXpAwards.includes(reward.id)) return state;
   const originalEntry = [...state.xpHistory].reverse().find((entry) => entry.id === reward.id);
