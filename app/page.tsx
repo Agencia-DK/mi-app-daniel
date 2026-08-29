@@ -3,9 +3,8 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { fullStudyBranches } from './study-data';
 import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
-import { LEVEL_NAMES, requirementForLevel } from './config/levelConfig';
+import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from './config/levelConfig';
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
-import { REWARD_CONFIG } from './config/rewardConfig';
 import { skillLevel } from './config/skillConfig';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
@@ -184,7 +183,7 @@ export default function Home() {
   const [progression, setProgression] = useState<ProgressionState>(INITIAL_PROGRESSION);
   const [progressionReady, setProgressionReady] = useState(false);
   const [coverLevel, setCoverLevel] = useState(1);
-  const [knowledgeTopics, setKnowledgeTopics] = useState(0);
+  const [, setKnowledgeTopics] = useState(0);
   const [completed, setCompleted] = useState(false);
   const [ideaItems, setIdeaItems] = useState(initialIdeas);
   const [newIdea, setNewIdea] = useState('');
@@ -216,7 +215,7 @@ export default function Home() {
   const [moneyAmount, setMoneyAmount] = useState('');
   const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
-  const level = progression.level;
+  const level = progression.highestLevelUnlocked;
   const levelCover = `/levels/level-${String(coverLevel).padStart(2, '0')}.webp`;
   const cover = completed ? '/levels/victory.webp' : levelCover;
   const levelTier = level >= 30 ? 'gold' : level >= 15 ? 'silver' : 'bronze';
@@ -238,6 +237,11 @@ export default function Home() {
   const debtTotal = moneyAssets.filter((item) => item.kind === 'debt').reduce((sum, item) => sum + item.value, 0);
   const totalWorth = cash + assetsTotal - debtTotal;
   const netMonthlyIncome = monthlyIncome - monthlyExpense;
+  const averageNetIncome = (months: number) => Array.from({ length: months }, (_, offset) => {
+    const month = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+    return moneyTransactions.filter((item) => item.date.startsWith(key)).reduce((sum, item) => sum + (item.type === 'income' ? item.amount : -item.amount), 0);
+  }).reduce((sum, value) => sum + value, 0) / months;
   const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(now.getFullYear()))).reduce((sum, item) => sum + item.amount, 0);
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${now.getFullYear()}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
   const chartMax = Math.max(1, ...monthlyChart);
@@ -295,6 +299,7 @@ export default function Home() {
     try {
       const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.progression) || localStorage.getItem('daniel-os-progression-v1') || 'null') as Partial<ProgressionState> | null;
       if (saved) setProgression({ ...INITIAL_PROGRESSION, ...saved,
+        level: Math.max(1, saved.highestLevelUnlocked || saved.level || 1), highestLevelUnlocked: Math.max(1, saved.highestLevelUnlocked || saved.level || 1),
         skillXp: saved.skillXp || {}, learningByDay: saved.learningByDay || {}, stabilityByDay: saved.stabilityByDay || {},
         habitDays: saved.habitDays || {}, dailyGeneralXp: saved.dailyGeneralXp || {}, activeXpAwards: saved.activeXpAwards || [],
         claimedRewards: saved.claimedRewards || [], xpHistory: saved.xpHistory || [] });
@@ -506,19 +511,19 @@ export default function Home() {
 
   const nextLevel = Math.min(level + 1, 40);
   const nextRequirement = requirementForLevel(nextLevel);
-  const bossProgress = nextRequirement.boss ? percentage(knowledgeTopics, nextRequirement.boss.completedKnowledgeTopics) : 100;
+  const incomeAverageMonths = incomeAverageMonthsForLevel(nextLevel);
+  const qualifyingNetIncome = averageNetIncome(incomeAverageMonths);
   const profileRequirements = [
     { icon: '✦', label: 'XP general', current: progression.generalXp.toLocaleString('es-MX'), target: nextRequirement.xp.toLocaleString('es-MX'), progress: percentage(progression.generalXp, nextRequirement.xp), tone: 'purple' },
     { icon: '$', label: 'Patrimonio neto', current: formatMoney(totalWorth), target: formatMoney(nextRequirement.netWorth), progress: percentage(totalWorth, nextRequirement.netWorth), tone: 'green' },
-    { icon: '↗', label: 'Ingreso neto mensual', current: formatMoney(netMonthlyIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(netMonthlyIncome, nextRequirement.netMonthlyIncome), tone: 'blue' },
+    { icon: '↗', label: `Ingreso neto · promedio ${incomeAverageMonths} meses`, current: formatMoney(qualifyingNetIncome), target: formatMoney(nextRequirement.netMonthlyIncome), progress: percentage(qualifyingNetIncome, nextRequirement.netMonthlyIncome), tone: 'blue' },
     { icon: '◈', label: 'Estabilidad', current: `${stability}%`, target: `${nextRequirement.stability}%`, progress: percentage(stability, nextRequirement.stability), tone: 'orange' },
-    ...(nextRequirement.boss ? [{ icon: '♕', label: nextRequirement.boss.label, current: String(knowledgeTopics), target: String(nextRequirement.boss.completedKnowledgeTopics), progress: bossProgress, tone: 'purple' }] : []),
   ];
   const canLevelUp = level < GAME_CONFIG.maxLevel && profileRequirements.every((item) => item.progress >= 100);
 
   useEffect(() => {
     if (!progressionReady || !canLevelUp) return;
-    setProgression((current) => ({ ...current, level: Math.min(GAME_CONFIG.maxLevel, current.level + 1), coins: current.coins + REWARD_CONFIG.levelUpCoins }));
+    setProgression((current) => { const unlocked = Math.min(GAME_CONFIG.maxLevel, current.highestLevelUnlocked + 1); return { ...current, level: unlocked, highestLevelUnlocked: unlocked }; });
   }, [progressionReady, canLevelUp, level]);
 
   return (

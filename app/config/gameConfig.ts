@@ -21,6 +21,7 @@ export type StabilityScores = {
 
 export type ProgressionState = {
   level: number;
+  highestLevelUnlocked: number;
   generalXp: number;
   coins: number;
   streak: number;
@@ -36,6 +37,7 @@ export type ProgressionState = {
 
 export const INITIAL_PROGRESSION: ProgressionState = {
   level: 1,
+  highestLevelUnlocked: 1,
   generalXp: 0,
   coins: COIN_CONFIG.initialBalance,
   streak: 0,
