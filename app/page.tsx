@@ -451,7 +451,6 @@ export default function Home() {
               <div className="coverShade" />
               <button className="coverArrow left" onClick={() => completed ? setCompleted(false) : setLevel(Math.max(1, level - 1))} disabled={level === 1 && !completed} aria-label={completed ? 'Volver al nivel 40' : 'Nivel anterior'}>‹</button>
               <div className="coverInfo"><span>{completed ? 'RECORRIDO COMPLETADO' : `NIVEL ${level} DE 40`}</span><b>{completed ? 'Felicidades, has ganado en la vida' : levelNames[level - 1]}</b></div>
-              <button className="coverArrow right" onClick={() => level === 40 ? setCompleted(true) : setLevel(level + 1)} disabled={completed} aria-label={level === 40 ? 'Ver final' : 'Nivel siguiente'}>›</button>
             </section>
 
             <section className="skills" aria-label="Habilidades">
