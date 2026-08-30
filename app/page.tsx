@@ -15,6 +15,12 @@ type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: strin
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
 type MoneyModal = 'income' | 'expense' | 'balance' | 'asset' | 'transactions' | 'assets' | null;
 const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+const HISTORICAL_INCOME: MoneyTransaction[] = [
+  27000, 37400, 60600, 54350, 70000, 108000, 73000, 94600, 133000, 132000, 107000, 49000,
+].map((amount, month) => ({ id: -(202500 + month + 1), type: 'income' as const, concept: `Ingreso ${new Date(2025, month).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}`, amount, date: `2025-${String(month + 1).padStart(2, '0')}-15T12:00:00.000Z` }));
+HISTORICAL_INCOME.push(...[
+  [1, 42600], [2, 40000], [3, 68800], [4, 71850], [6, 40000], [7, 26800],
+].map(([month, amount]) => ({ id: -(202600 + month), type: 'income' as const, concept: `Ingreso ${new Date(2026, month - 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}`, amount, date: `2026-${String(month).padStart(2, '0')}-15T12:00:00.000Z` })));
 
 const skills = [
   ['Finanzas', '1,870 / 2,500', '75%', '/icons/finance.webp'],
@@ -238,6 +244,7 @@ export default function Home() {
   const [moneyConcept, setMoneyConcept] = useState('');
   const [moneyAmount, setMoneyAmount] = useState('');
   const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
+  const [chartYear, setChartYear] = useState(2026);
   const [unlockedLevel, setUnlockedLevel] = useState<number | null>(null);
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const level = progression.highestLevelUnlocked;
@@ -262,13 +269,10 @@ export default function Home() {
   const debtTotal = moneyAssets.filter((item) => item.kind === 'debt').reduce((sum, item) => sum + item.value, 0);
   const totalWorth = cash + assetsTotal - debtTotal;
   const netMonthlyIncome = monthlyIncome - monthlyExpense;
-  const averageNetIncome = (months: number) => Array.from({ length: months }, (_, offset) => {
-    const month = new Date(now.getFullYear(), now.getMonth() - offset, 1);
-    const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
-    return moneyTransactions.filter((item) => item.date.startsWith(key)).reduce((sum, item) => sum + (item.type === 'income' ? item.amount : -item.amount), 0);
-  }).reduce((sum, value) => sum + value, 0) / months;
-  const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(now.getFullYear()))).reduce((sum, item) => sum + item.amount, 0);
-  const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${now.getFullYear()}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
+  const recordedMonths = [...new Set(moneyTransactions.map((item) => item.date.slice(0, 7)).filter((key) => key <= currentMonth))].sort().reverse();
+  const averageNetIncome = (months: number) => recordedMonths.slice(0, months).reduce((sum, key) => sum + moneyTransactions.filter((item) => item.date.startsWith(key)).reduce((monthTotal, item) => monthTotal + (item.type === 'income' ? item.amount : -item.amount), 0), 0) / Math.max(1, Math.min(months, recordedMonths.length));
+  const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(chartYear))).reduce((sum, item) => sum + item.amount, 0);
+  const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
   const chartMax = Math.max(1, ...monthlyChart);
   const targetLevelForStability = Math.min(level + 1, GAME_CONFIG.maxLevel);
   const stabilityIncomeTarget = requirementForLevel(targetLevelForStability).netMonthlyIncome;
@@ -358,9 +362,10 @@ export default function Home() {
       const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.money) || localStorage.getItem('daniel-os-money-v1') || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
       if (saved) {
         setCash(Number(saved.cash) || 0);
-        setMoneyTransactions(saved.transactions || []);
+        const savedTransactions = saved.transactions || [];
+        setMoneyTransactions([...savedTransactions, ...HISTORICAL_INCOME.filter((seed) => !savedTransactions.some((item) => item.id === seed.id))]);
         setMoneyAssets((saved.assets || []).map((asset) => ({ ...asset, kind: asset.kind || 'asset' })));
-      }
+      } else setMoneyTransactions(HISTORICAL_INCOME);
     } catch { /* Empieza en cero si el registro local no es válido. */ }
     setMoneyReady(true);
   }, []);
@@ -622,6 +627,7 @@ export default function Home() {
   ];
   const missingRequirements = level === GAME_CONFIG.maxLevel ? [] : profileRequirements.filter((item) => item.progress < 100);
   const canLevelUp = level < GAME_CONFIG.maxLevel && profileRequirements.every((item) => item.progress >= 100);
+  const totalLevelProgress = Math.round(profileRequirements.reduce((sum, item) => sum + Math.min(100, item.progress), 0) / profileRequirements.length);
   const recentXp = progression.xpHistory.slice(-5).reverse();
   const nextFinancialMilestone = Object.entries(XP_CONFIG.financialMilestones).map(([target, reward]) => ({ target: Number(target), reward })).find((item) => item.target > totalWorth);
   const nextStreakMilestone = Object.entries(XP_CONFIG.streaks).map(([target, reward]) => ({ target: Number(target), reward })).find((item) => item.target > progression.streak);
@@ -686,9 +692,10 @@ export default function Home() {
             <div className="profileHeading"><div><span>♕ MI NIVEL</span><h1>Nivel actual</h1><p>{LEVEL_NAMES[level - 1]} · {progression.generalXp.toLocaleString('es-MX')} XP total</p></div><div className={`profileMedal ${levelTier}`}><small>NIVEL</small><b>{level}</b></div></div>
             <article className="levelUnlockCard">
               <div className="unlockGlow" aria-hidden="true">◇</div>
-              <div className="profileCharacter"><img src={`/levels/level-${String(level).padStart(2, '0')}.webp`} alt={`Personaje correspondiente al nivel ${level}`} /><span><small>NIVEL ACTUAL</small><b>NIVEL {level}</b><em>{progression.generalXp.toLocaleString('es-MX')} XP TOTAL</em></span></div>
-              <header><span>⌃ {level === GAME_CONFIG.maxLevel ? 'NIVEL MÁXIMO' : 'SIGUIENTE NIVEL'}</span><h2>{level === GAME_CONFIG.maxLevel ? 'NIVEL 40 · COMPLETADO' : <>NIVEL {level} <em>→</em> NIVEL {nextLevel}</>}</h2></header>
+              <header><span>⌃ {level === GAME_CONFIG.maxLevel ? 'NIVEL MÁXIMO' : 'SIGUIENTE NIVEL'}</span><h2>{level === GAME_CONFIG.maxLevel ? 'NIVEL 40 · COMPLETADO' : <>NIVEL {level} <em>→</em> NIVEL {nextLevel}</>}</h2><p>Sigue avanzando. Cada paso te acerca a una mejor versión de ti.</p></header>
+              <aside className="totalLevelProgress"><i>★</i><span><b>Progreso total</b><strong>{totalLevelProgress}%</strong></span><q>Disciplina hoy,<br />libertad mañana.</q></aside>
               <div className="requirementList">{profileRequirements.map((item) => <div className={`requirement ${item.tone}`} key={item.label}><i>{item.icon}</i><span><b>{item.label}</b><small>{item.current} / {item.target}</small><strong><em style={{ width: `${item.progress}%` }} /></strong></span>{item.progress >= 100 ? <mark>✓ COMPLETADO</mark> : <mark>{item.progress}%</mark>}</div>)}</div>
+              {level < GAME_CONFIG.maxLevel && <aside className="levelRewardPreview"><img src="/icons/xp.webp" alt="" /><h3>Recompensa al llegar<br />a Nivel {nextLevel}</h3><p><b>🪙</b> +{nextLevel * COIN_CONFIG.generalLevelMultiplier} monedas</p><p><b>🔒</b> Nivel guardado permanentemente</p><button onClick={() => document.querySelector('.levelInsights')?.scrollIntoView({ behavior: 'smooth' })}>Ver próximos hitos →</button></aside>}
             </article>
             <div className="profileBottom">
               <article className="missingCard"><span>{missingRequirements.length ? 'TE FALTA:' : '✓ COMPLETADO'}</span>{missingRequirements.length ? missingRequirements.map((item) => <p key={item.label}><i>{item.icon}</i><b>{item.missing}</b></p>) : <p><i>✓</i><b>Todos los requisitos están completos</b></p>}</article>
@@ -704,7 +711,7 @@ export default function Home() {
               <div className="moneyTotals"><article><span>▣ PATRIMONIO NETO</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Activos menos deudas</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ ACTIVOS NETOS</span><b>{formatMoney(assetsTotal - debtTotal)}</b><small>MXN</small><em>Ahorros, inversiones y activos</em></article></div>
               <div className="moneyActions"><button onClick={() => openMoneyModal('income')}><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button onClick={() => openMoneyModal('expense')}><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button onClick={() => openMoneyModal('balance')}><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
               <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button onClick={() => openMoneyModal('transactions')}>Ver todo</button></header><p><span>Ingreso del mes</span><strong>{formatMoney(monthlyIncome)} ↑</strong></p><p><span>Gasto del mes</span><strong>−{formatMoney(monthlyExpense)} ↓</strong></p><p><span>Balance mensual</span><strong>{formatMoney(monthlyIncome - monthlyExpense)}</strong></p><p className="cashRow"><span>Dinero actual</span><strong>{formatMoney(cash)}</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button onClick={() => openMoneyModal('assets')}>Ver todo</button></header>{moneyAssets.length ? moneyAssets.slice(0, 3).map((asset) => <p key={asset.id}><i>◇</i><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)} <small>MXN</small></strong></p>) : <p className="emptyMoney">Aún no has registrado patrimonio.</p>}<button className="addAsset" onClick={() => openMoneyModal('asset')}>＋ Agregar patrimonio</button></article></div>
-              <article className="moneyChart"><header><b>▥ DINERO GANADO {now.getFullYear()}</b><strong>▲ +{formatMoney(annualIncome)} este año</strong></header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{formatMoney(value)}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
+              <article className="moneyChart"><header><b>▥ DINERO GANADO {chartYear}</b><div className="chartYears"><button className={chartYear === 2025 ? 'active' : ''} onClick={() => setChartYear(2025)}>2025</button><button className={chartYear === 2026 ? 'active' : ''} onClick={() => setChartYear(2026)}>2026</button></div><strong>▲ +{formatMoney(annualIncome)} en {chartYear}</strong></header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{value ? formatMoney(value) : '—'}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
             </section>
           </section>
         ) : (
