@@ -9,6 +9,7 @@ import { knowledgeLevelGeneralXp, skillLevel, skillLevelXp, skillXpForTheme } fr
 import { REWARD_CONFIG } from './config/rewardConfig';
 import { COIN_CONFIG, coinRewardForScore } from './config/coinConfig';
 import { STABILITY_CONFIG, financialStability, stabilityClassification, stabilityWindowDaysForLevel } from './config/stabilityConfig';
+import StoreView from './store';
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
@@ -284,7 +285,11 @@ export default function Home() {
   };
   const stabilityWindowDays = stabilityWindowDaysForLevel(targetLevelForStability);
   const stability = averageStability({ ...progression.stabilityByDay, [dayKey()]: todayStability }, now, stabilityWindowDays);
+  const stability30 = averageStability({ ...progression.stabilityByDay, [dayKey()]: todayStability }, now, 30);
   const stabilityLabel = stabilityClassification(stability);
+  const habits14 = Math.round(Array.from({ length: 14 }, (_, index) => { const date = new Date(now); date.setDate(date.getDate() - index); const entry = index === 0 ? { done: doneActivities.length, total: activityItems.length } : progression.habitDays[dayKey(date)]; return entry?.total ? entry.done / entry.total * 100 : 0; }).reduce((sum, value) => sum + value, 0) / 14);
+  const savingsGoalMet = monthlyIncome > 0 && netMonthlyIncome / monthlyIncome >= STABILITY_CONFIG.finances.savingsRateTarget;
+  const incomeGoalMet = netMonthlyIncome >= stabilityIncomeTarget;
 
   useEffect(() => {
     const now = new Date();
@@ -597,6 +602,12 @@ export default function Home() {
     setMoneyModal(null);
   };
 
+  const spendCoins = (amount: number) => {
+    if (amount <= 0 || progression.coins < amount) return false;
+    setProgression((current) => current.coins >= amount ? { ...current, coins: current.coins - amount } : current);
+    return true;
+  };
+
   const nextLevel = Math.min(level + 1, 40);
   const nextRequirement = requirementForLevel(nextLevel);
   const incomeAverageMonths = incomeAverageMonthsForLevel(nextLevel);
@@ -668,6 +679,8 @@ export default function Home() {
               <article className="activityBox generalBox"><header><div><b>▰ Pendientes generales</b><small>Ideas, compras y recordatorios sin fecha · sin XP ni monedas</small></div><button onClick={() => openItemModal('reminder')}>＋ Agregar</button></header><div className="reminderList">{reminderItems.map(([name, description, category], index) => <button className={doneReminders.includes(index) ? 'done' : ''} onClick={() => toggleReminder(index)} key={`${name}-${index}`}><i>{doneReminders.includes(index) ? '✓' : ''}</i><span><b>{name}</b><small>{description}</small></span><em className={`reminderTag ${category.toLowerCase()}`}>{category}</em><strong>⋮</strong></button>)}</div></article>
             </div>
           </section>
+        ) : active === 'Tiendita' ? (
+          <StoreView coins={progression.coins} onSpend={spendCoins} metrics={{ level, stability, stability30, habits14, savingsGoal: savingsGoalMet, incomeGoal: incomeGoalMet, netIncome: netMonthlyIncome }} />
         ) : active === 'Perfil' ? (
           <section className="profileView" aria-label="Perfil y requisitos del siguiente nivel">
             <div className="profileHeading"><div><span>♕ MI NIVEL</span><h1>Nivel actual</h1><p>{LEVEL_NAMES[level - 1]} · {progression.generalXp.toLocaleString('es-MX')} XP total</p></div><div className={`profileMedal ${levelTier}`}><small>NIVEL</small><b>{level}</b></div></div>
@@ -721,7 +734,7 @@ export default function Home() {
         <nav className="nav" aria-label="Navegación principal">
           {['Ideas', 'Estudio'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Ideas' ? '✦' : '▤'}</span>{item}</button>)}
           <button className={`homeButton ${active === 'HOME' ? 'active' : ''}`} onClick={() => setActive('HOME')} aria-label="Ir a la página principal"><span>⌂</span>HOME</button>
-          {['Actividades', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Actividades' ? '▦' : '♙'}</span>{item}</button>)}
+          {['Actividades', 'Tiendita', 'Perfil'].map((item) => <button className={active === item ? 'active' : ''} onClick={() => setActive(item)} key={item}><span>{item === 'Actividades' ? '▦' : item === 'Tiendita' ? '🛍' : '♙'}</span>{item}</button>)}
         </nav>
       </section>
     </main>
