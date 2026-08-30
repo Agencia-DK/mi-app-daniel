@@ -15,6 +15,7 @@ type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: strin
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
 type MoneyModal = 'income' | 'expense' | 'balance' | 'asset' | 'transactions' | 'assets' | null;
 const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
+const formatSignedMoney = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatMoney(Math.abs(value))}`;
 const HISTORICAL_INCOME: MoneyTransaction[] = [
   27000, 37400, 60600, 54350, 70000, 108000, 73000, 94600, 133000, 132000, 107000, 49000,
 ].map((amount, month) => ({ id: -(202500 + month + 1), type: 'income' as const, concept: `Ingreso ${new Date(2025, month).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}`, amount, date: `2025-${String(month + 1).padStart(2, '0')}-15T12:00:00.000Z` }));
@@ -273,6 +274,14 @@ export default function Home() {
   const averageNetIncome = (months: number) => recordedMonths.slice(0, months).reduce((sum, key) => sum + moneyTransactions.filter((item) => item.date.startsWith(key)).reduce((monthTotal, item) => monthTotal + (item.type === 'income' ? item.amount : -item.amount), 0), 0) / Math.max(1, Math.min(months, recordedMonths.length));
   const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(chartYear))).reduce((sum, item) => sum + item.amount, 0);
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
+  const comparisonMonth = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(chartYear))).reduce((latest, item) => Math.max(latest, Number(item.date.slice(5, 7)) - 1), -1);
+  const previousYearChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear - 1}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
+  const comparisonCurrent = comparisonMonth >= 0 ? monthlyChart.slice(0, comparisonMonth + 1).reduce((sum, value) => sum + value, 0) : 0;
+  const comparisonPrevious = comparisonMonth >= 0 ? previousYearChart.slice(0, comparisonMonth + 1).reduce((sum, value) => sum + value, 0) : 0;
+  const comparisonDifference = comparisonCurrent - comparisonPrevious;
+  const comparisonPercent = comparisonPrevious ? comparisonDifference / comparisonPrevious * 100 : 0;
+  const comparisonTone = comparisonDifference > 0 ? 'positive' : comparisonDifference < 0 ? 'negative' : 'neutral';
+  const comparisonMonths = comparisonMonth >= 0 ? `Ene–${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][comparisonMonth]}` : '';
   const chartMax = Math.max(1, ...monthlyChart);
   const targetLevelForStability = Math.min(level + 1, GAME_CONFIG.maxLevel);
   const stabilityIncomeTarget = requirementForLevel(targetLevelForStability).netMonthlyIncome;
@@ -362,8 +371,8 @@ export default function Home() {
       const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.money) || localStorage.getItem('daniel-os-money-v1') || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
       if (saved) {
         setCash(Number(saved.cash) || 0);
-        const savedTransactions = saved.transactions || [];
-        setMoneyTransactions([...savedTransactions, ...HISTORICAL_INCOME.filter((seed) => !savedTransactions.some((item) => item.id === seed.id))]);
+        const historicalIds = new Set(HISTORICAL_INCOME.map((item) => item.id));
+        setMoneyTransactions([...(saved.transactions || []).filter((item) => !historicalIds.has(item.id)), ...HISTORICAL_INCOME]);
         setMoneyAssets((saved.assets || []).map((asset) => ({ ...asset, kind: asset.kind || 'asset' })));
       } else setMoneyTransactions(HISTORICAL_INCOME);
     } catch { /* Empieza en cero si el registro local no es válido. */ }
@@ -615,6 +624,8 @@ export default function Home() {
 
   const nextLevel = Math.min(level + 1, 40);
   const nextRequirement = requirementForLevel(nextLevel);
+  const currentRequirement = requirementForLevel(level);
+  const headerXpProgress = level >= GAME_CONFIG.maxLevel ? 100 : percentage(Math.max(0, progression.generalXp - currentRequirement.xp), Math.max(1, nextRequirement.xp - currentRequirement.xp));
   const incomeAverageMonths = incomeAverageMonthsForLevel(nextLevel);
   const qualifyingNetIncome = averageNetIncome(incomeAverageMonths);
   const bossRequirement = REWARD_CONFIG.bossLevels[nextLevel as keyof typeof REWARD_CONFIG.bossLevels];
@@ -650,7 +661,7 @@ export default function Home() {
     <main className="stage">
       <section className="dashboard" aria-label="Panel de progreso personal">
         <header className="topbar">
-          <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i /></span></div></div>
+          <div className="profile"><div className={`avatar ${levelTier}`} role="img" aria-label={`Nivel ${level}, categoría ${levelTierLabel}`}><b>{level}</b></div><div><strong>DANIEL</strong><span>Nivel {level} <i aria-label={`${headerXpProgress}% de XP hacia el nivel ${nextLevel}`} style={{ background: `linear-gradient(90deg,#9f64ff ${headerXpProgress}%,#282430 ${headerXpProgress}%)` }} /></span></div></div>
           <div className="topStats">
             <div className="statCard"><img src="/icons/xp.webp" alt="" /><span><b>XP</b><strong>{progression.generalXp.toLocaleString('es-MX')}</strong></span></div>
             <div className="statCard"><img src="/icons/coins.webp" alt="" /><span><b>Monedas</b><strong>{progression.coins.toLocaleString('es-MX')}</strong></span></div>
@@ -711,7 +722,7 @@ export default function Home() {
               <div className="moneyTotals"><article><span>▣ PATRIMONIO NETO</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Activos menos deudas</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ ACTIVOS NETOS</span><b>{formatMoney(assetsTotal - debtTotal)}</b><small>MXN</small><em>Ahorros, inversiones y activos</em></article></div>
               <div className="moneyActions"><button onClick={() => openMoneyModal('income')}><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button onClick={() => openMoneyModal('expense')}><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button onClick={() => openMoneyModal('balance')}><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
               <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button onClick={() => openMoneyModal('transactions')}>Ver todo</button></header><p><span>Ingreso del mes</span><strong>{formatMoney(monthlyIncome)} ↑</strong></p><p><span>Gasto del mes</span><strong>−{formatMoney(monthlyExpense)} ↓</strong></p><p><span>Balance mensual</span><strong>{formatMoney(monthlyIncome - monthlyExpense)}</strong></p><p className="cashRow"><span>Dinero actual</span><strong>{formatMoney(cash)}</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button onClick={() => openMoneyModal('assets')}>Ver todo</button></header>{moneyAssets.length ? moneyAssets.slice(0, 3).map((asset) => <p key={asset.id}><i>◇</i><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)} <small>MXN</small></strong></p>) : <p className="emptyMoney">Aún no has registrado patrimonio.</p>}<button className="addAsset" onClick={() => openMoneyModal('asset')}>＋ Agregar patrimonio</button></article></div>
-              <article className="moneyChart"><header><b>▥ DINERO GANADO {chartYear}</b><div className="chartYears"><button className={chartYear === 2025 ? 'active' : ''} onClick={() => setChartYear(2025)}>2025</button><button className={chartYear === 2026 ? 'active' : ''} onClick={() => setChartYear(2026)}>2026</button></div><strong>▲ +{formatMoney(annualIncome)} en {chartYear}</strong></header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{value ? formatMoney(value) : '—'}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
+              <article className="moneyChart"><header><b>▥ DINERO GANADO {chartYear}</b><div className="chartYears"><button className={chartYear === 2025 ? 'active' : ''} onClick={() => setChartYear(2025)}>2025</button><button className={chartYear === 2026 ? 'active' : ''} onClick={() => setChartYear(2026)}>2026</button></div>{comparisonPrevious > 0 ? <div className={`yearComparison ${comparisonTone}`}><strong>{comparisonDifference > 0 ? '▲' : comparisonDifference < 0 ? '▼' : '◆'} {formatSignedMoney(comparisonDifference)} este año</strong><small>{comparisonPercent > 0 ? '+' : comparisonPercent < 0 ? '−' : ''}{Math.abs(comparisonPercent).toLocaleString('es-MX', { maximumFractionDigits: 1 })}% vs {chartYear - 1} · {comparisonMonths}</small></div> : <div className="yearComparison neutral"><strong>◆ {formatMoney(annualIncome)} en {chartYear}</strong><small>Sin datos de {chartYear - 1} para comparar</small></div>}</header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{value ? formatMoney(value) : '—'}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
             </section>
           </section>
         ) : (
