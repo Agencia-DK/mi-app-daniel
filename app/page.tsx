@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { fullStudyBranches } from './study-data';
+import { fullStudyBranches, type StudyBranch } from './study-data';
 import { GAME_CONFIG, INITIAL_PROGRESSION, averageStability, grantCoins, grantXp, habitStreak, percentage, revokeXp, type ProgressionState } from './config/gameConfig';
 import { LEVEL_NAMES, incomeAverageMonthsForLevel, requirementForLevel } from './config/levelConfig';
 import { XP_CONFIG, normalizedHabitXp, normalizedTaskXp, xpFromLabel, type XpReward } from './config/xpConfig';
@@ -76,11 +76,6 @@ const initialIdeas = [
   { title: 'Newsletter de oportunidades', detail: 'Ideas accionables de tecnología y negocios', tags: ['Contenido', 'Negocios'], status: 'Borrador' },
 ];
 
-type StudyTask = { name: string; done: boolean; xpAwarded?: boolean };
-type StudyModule = { name: string; tasks: StudyTask[] };
-type StudyTopic = { name: string; progress: number; locked?: boolean; modules: StudyModule[] };
-type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[] };
-
 const studyBranches: StudyBranch[] = [
   { name: 'Marketing', icon: '📣', level: 5, tone: 'coral', topics: [
     { name: 'Fundamentos de marketing', progress: 100, modules: [] },
@@ -108,7 +103,7 @@ const studyBranches: StudyBranch[] = [
   { name: 'Habilidades sociales', icon: '👥', level: 2, tone: 'orange', topics: [{ name: 'Comunicación', progress: 50, modules: [] }, { name: 'Negociación', progress: 25, modules: [] }, { name: 'Networking', progress: 20, modules: [] }] },
 ];
 
-function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number) => void; onKnowledgeSummary: (completed: number) => void }) {
+function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Record<string, number>; onTaskToggled: (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number, generalAmount?: number) => void; onKnowledgeSummary: (completed: number) => void }) {
   const [branches, setBranches] = useState(fullStudyBranches);
   const [branchIndex, setBranchIndex] = useState<number | null>(null);
   const [topicIndex, setTopicIndex] = useState<number | null>(null);
@@ -122,17 +117,31 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
     try {
       const storedBranches = JSON.parse(localStorage.getItem('daniel-os-study-v2') || 'null');
       const storedSaved = JSON.parse(localStorage.getItem('daniel-os-study-saved') || 'null');
-      if (storedBranches) setBranches(storedBranches.map((branch: StudyBranch) => ({
-        ...branch,
-        topics: branch.topics.map((topic, index) => ({
-          ...topic,
-          locked: index > 0 && branch.topics[index - 1].progress < 100,
-          modules: topic.modules.map((module) => ({
-            ...module,
-            tasks: module.tasks.map((task) => ({ ...task, xpAwarded: task.xpAwarded ?? task.done })),
-          })),
-        })),
-      })));
+      if (storedBranches) {
+        const storedByName = new Map<string, StudyBranch>(storedBranches.map((branch: StudyBranch) => [branch.name, branch]));
+        setBranches(fullStudyBranches.map((base) => {
+          const stored = storedByName.get(base.name);
+          const topics = base.topics.map((baseTopic, index) => {
+            const old = stored?.topics.find((topic) => topic.name === baseTopic.name);
+            const modules = baseTopic.modules.map((baseModule) => {
+              const oldModule = old?.modules.find((module) => module.name === baseModule.name);
+              return { ...baseModule, tasks: baseModule.tasks.map((baseTask) => {
+                const oldTask = oldModule?.tasks.find((task) => task.name === baseTask.name);
+                return oldTask ? { ...baseTask, ...oldTask, xpAwarded: oldTask.xpAwarded ?? oldTask.done } : baseTask;
+              }) };
+            });
+            const progress = modules.flatMap((module) => module.tasks).length
+              ? Math.round(modules.flatMap((module) => module.tasks).filter((task) => task.done).length / modules.flatMap((module) => module.tasks).length * 100)
+              : old?.progress ?? baseTopic.progress;
+            return { ...baseTopic, ...old, modules, progress, locked: index > 0 && (stored?.topics[index - 1]?.progress ?? base.topics[index - 1].progress) < 100 };
+          });
+          const books = (base.books || []).map((book) => {
+            const old = stored?.books?.find((item) => item.id === book.id);
+            return old ? { ...book, done: old.done, xpAwarded: old.xpAwarded ?? old.done } : book;
+          });
+          return { ...base, ...stored, topics, books };
+        }));
+      }
       if (storedSaved) setSaved(storedSaved);
     } catch { /* Keep the starter curriculum. */ }
     setStudyReady(true);
@@ -174,6 +183,15 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
     }));
     if (willComplete) window.setTimeout(() => window.alert(`NIVEL COMPLETADO\n\n${branch.name}\nNivel ${topicIndex + 1} completado\n\n+${skillLevelXp(Math.min(20, topicIndex + 2))} XP total conseguido${topicIndex < branch.topics.length - 1 ? `\n\nNIVEL ${topicIndex + 2} DESBLOQUEADO` : ''}`), 0);
   };
+  const toggleBook = (bookId: string) => {
+    if (branchIndex === null) return;
+    const branch = branches[branchIndex];
+    const book = branch.books?.find((item) => item.id === bookId);
+    if (!book) return;
+    const nextDone = !book.done;
+    if (nextDone && !book.xpAwarded) onTaskToggled(branch.name, `book:${branch.name}:${book.id}`, `Libro terminado: ${book.title}`, true, 0, undefined, book.xp);
+    setBranches((current) => current.map((item, index) => index !== branchIndex ? item : ({ ...item, books: item.books?.map((entry) => entry.id === bookId ? { ...entry, done: nextDone, xpAwarded: entry.xpAwarded || nextDone } : entry) })));
+  };
   useEffect(() => { if (studyReady) onKnowledgeSummary(completedTopics); }, [studyReady, completedTopics]);
   const saveMaterial = () => {
     if (!material.title.trim()) return;
@@ -188,7 +206,11 @@ function StudyView({ skillXp, onTaskToggled, onKnowledgeSummary }: { skillXp: Re
     {selectedBranch ? <div className="coursePanel">
       <button className="studyBack" onClick={() => topicIndex === null ? setBranchIndex(null) : setTopicIndex(null)}>‹ {topicIndex === null ? 'Volver al árbol' : selectedBranch.name}</button>
       <small>{selectedBranch.name}: {Math.round(skillXp[selectedBranch.name] || 0)} XP · Nivel {skillLevel(skillXp[selectedBranch.name] || 0)}</small>
-      {selectedTopic ? <div className="topicCourse"><header><span>{selectedBranch.icon} {selectedBranch.name}</span><h2>{selectedTopic.name}</h2><div><i style={{ width: `${selectedTopic.progress}%` }} /></div><b>{selectedTopic.progress}% completado</b></header><div className="moduleList">{selectedTopic.modules.length ? selectedTopic.modules.map((module, moduleIndex) => { const done = module.tasks.length > 0 && module.tasks.every((task) => task.done); return <article key={module.name}><header><span>MÓDULO {moduleIndex + 1}</span><b>{module.name}</b><em>{done ? '✓ Completado' : module.tasks.some((task) => task.done) ? 'En progreso' : 'Pendiente'}</em></header>{module.tasks.map((task, taskIndex) => <button className={task.done ? 'done' : ''} onClick={() => toggleStudyTask(moduleIndex, taskIndex)} key={task.name}><i>{task.done ? '✓' : ''}</i><span>{task.name}</span></button>)}</article>; }) : <div className="emptyCourse"><b>Curso listo para crecer</b><p>Guarda videos, lecturas o prácticas para construir este tema.</p><button onClick={() => setShowSave(true)}>＋ Agregar material</button></div>}</div></div> : <><div className={`branchTitle ${selectedBranch.tone}`}><i>{selectedBranch.icon}</i><span><small>RAMA DE CONOCIMIENTO</small><h2>{selectedBranch.name}</h2><b>Nivel {selectedBranch.level}</b></span></div><div className="topicList">{selectedBranch.topics.map((topic, index) => <button disabled={topic.locked} onClick={() => setTopicIndex(index)} key={topic.name}><i>{topic.locked ? '🔒' : topic.progress === 100 ? '✓' : topic.progress > 0 ? '●' : '○'}</i><span><b>{topic.name}</b><small>{topic.locked ? 'Completa los temas anteriores' : topic.progress === 100 ? 'Completado' : topic.progress > 0 ? 'En curso' : 'Sin empezar'}</small></span>{!topic.locked && <><div><em style={{ width: `${topic.progress}%` }} /></div><strong>{topic.progress}%</strong></>}</button>)}</div></>}
+      {selectedTopic ? <div className="topicCourse"><header><span>{selectedBranch.icon} {selectedBranch.name}</span><h2>{selectedTopic.name}</h2><div><i style={{ width: `${selectedTopic.progress}%` }} /></div><b>{selectedTopic.progress}% completado</b></header><div className="moduleList">{selectedTopic.modules.length ? selectedTopic.modules.map((module, moduleIndex) => { const done = module.tasks.length > 0 && module.tasks.every((task) => task.done); return <article key={module.name}><header><span>MÓDULO {moduleIndex + 1}</span><b>{module.name}</b><em>{done ? '✓ Completado' : module.tasks.some((task) => task.done) ? 'En progreso' : 'Pendiente'}</em></header>{module.tasks.map((task, taskIndex) => <button className={task.done ? 'done' : ''} onClick={() => toggleStudyTask(moduleIndex, taskIndex)} key={task.name}><i>{task.done ? '✓' : ''}</i><span>{task.name}</span></button>)}</article>; }) : <div className="emptyCourse"><b>Curso listo para crecer</b><p>Guarda videos, lecturas o prácticas para construir este tema.</p><button onClick={() => setShowSave(true)}>＋ Agregar material</button></div>}</div></div> : <>
+        <div className={`branchTitle ${selectedBranch.tone}`}><i>{selectedBranch.icon}</i><span><small>RAMA DE CONOCIMIENTO</small><h2>{selectedBranch.name}</h2><b>Nivel {selectedBranch.level}</b></span></div>
+        <div className="topicList">{selectedBranch.topics.map((topic, index) => <button disabled={topic.locked} onClick={() => setTopicIndex(index)} key={topic.name}><i>{topic.locked ? '🔒' : topic.progress === 100 ? '✓' : topic.progress > 0 ? '●' : '○'}</i><span><b>{topic.name}</b><small>{topic.locked ? 'Completa los temas anteriores' : topic.progress === 100 ? 'Completado' : topic.progress > 0 ? 'En curso' : 'Sin empezar'}</small></span>{!topic.locked && <><div><em style={{ width: `${topic.progress}%` }} /></div><strong>{topic.progress}%</strong></>}</button>)}</div>
+        {!!selectedBranch.books?.length && <details className="bookResources"><summary>📚 Recursos adicionales <small>Opcional · no afecta el nivel</small></summary><div>{selectedBranch.books.map((book) => <button className={book.done ? 'done' : ''} onClick={() => toggleBook(book.id)} key={book.id}><i>{book.done ? '✓' : ''}</i><span><b>{book.title}</b><small>{book.author}</small></span><em>{book.difficulty}</em><strong>+{book.xp} XP</strong></button>)}</div></details>}
+      </>}
     </div> : <><div className="studyOverview"><article><div className="progressRing" style={{ '--progress': `${overall * 3.6}deg` } as CSSProperties}><b>{overall}%</b><span>completado</span></div><ul><li><i />Completados <b>{completedTopics}</b></li><li><i />En curso <b>{totalTopics - completedTopics}</b></li><li><i />Por aprender <b>{saved.length}</b></li></ul><p>“Un poco mejor cada día, grandes resultados con el tiempo.”</p></article><div className="knowledgeTree" style={{ backgroundImage: 'linear-gradient(#08051a22,#08051aaa),url(/study-tree.png)' }}>{visibleBranches.map(({ branch, index }) => { const progress = branch.topics[Math.min(branch.level - 1, branch.topics.length - 1)]?.progress || 0; return <button className={`treeNode node${index + 1} ${branch.tone}`} onClick={() => openBranch(index)} key={branch.name}><i>{branch.icon}</i><span><b>{branch.name}</b><small>Nivel {branch.level} · {progress}%</small><em><strong style={{ width: `${progress}%` }} /></em></span></button>; })}</div></div>{saved.length > 0 && <section className="studyInbox"><header><div><span>📥</span><h2>Pendiente por aprender</h2></div><b>{saved.length} guardados</b></header><div>{saved.map((item, index) => <article key={`${item.title}-${index}`}><i>{item.type.split(' ')[0]}</i><span><b>{item.title}</b><small>{item.branch} → {item.topic}</small></span><em>{item.type.replace(/^\S+\s/, '')}</em></article>)}</div></section>}</>}
     {showSave && <div className="studyModalBackdrop" onMouseDown={() => setShowSave(false)}><section className="studyModal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}><header><div><span>GUARDAR PARA ESTUDIAR</span><h2>Nuevo material</h2></div><button onClick={() => setShowSave(false)}>×</button></header><label>Título<input autoFocus value={material.title} onChange={(event) => setMaterial({ ...material, title: event.target.value })} placeholder="Ej. Cómo manejar objeciones" /></label><label>Rama<select value={material.branch} onChange={(event) => { const branch = branches.find((item) => item.name === event.target.value)!; setMaterial({ ...material, branch: branch.name, topic: branch.topics.find((topic) => !topic.locked)?.name || '' }); }}>{branches.map((branch) => <option key={branch.name}>{branch.name}</option>)}</select></label><label>Tema<select value={material.topic} onChange={(event) => setMaterial({ ...material, topic: event.target.value })}>{branchTopics.map((topic) => <option key={topic.name}>{topic.name}</option>)}</select></label><fieldset><legend>Tipo</legend><div>{['🎥 Video','📄 Artículo','📚 Libro','🧪 Práctica','📝 Nota'].map((type) => <button className={material.type === type ? 'selected' : ''} onClick={() => setMaterial({ ...material, type })} key={type}>{type}</button>)}</div></fieldset><button className="saveStudy" onClick={saveMaterial}>Guardar material</button></section></div>}
   </section>;
@@ -245,7 +267,6 @@ export default function Home() {
   const [moneyConcept, setMoneyConcept] = useState('');
   const [moneyAmount, setMoneyAmount] = useState('');
   const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
-  const [chartYear, setChartYear] = useState(2026);
   const [unlockedLevel, setUnlockedLevel] = useState<number | null>(null);
   const [calendar, setCalendar] = useState({ label: 'Esta semana', date: '', todayIndex: 0, days: ['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day) => ({ day, date: '' })) });
   const level = progression.highestLevelUnlocked;
@@ -272,17 +293,17 @@ export default function Home() {
   const netMonthlyIncome = monthlyIncome - monthlyExpense;
   const recordedMonths = [...new Set(moneyTransactions.map((item) => item.date.slice(0, 7)).filter((key) => key <= currentMonth))].sort().reverse();
   const averageNetIncome = (months: number) => recordedMonths.slice(0, months).reduce((sum, key) => sum + moneyTransactions.filter((item) => item.date.startsWith(key)).reduce((monthTotal, item) => monthTotal + (item.type === 'income' ? item.amount : -item.amount), 0), 0) / Math.max(1, Math.min(months, recordedMonths.length));
-  const annualIncome = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(chartYear))).reduce((sum, item) => sum + item.amount, 0);
+  const chartYear = now.getFullYear();
+  const previousChartYear = chartYear - 1;
+  const chartMonthIndex = now.getMonth();
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
-  const comparisonMonth = moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(String(chartYear))).reduce((latest, item) => Math.max(latest, Number(item.date.slice(5, 7)) - 1), -1);
-  const previousYearChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear - 1}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
-  const comparisonCurrent = comparisonMonth >= 0 ? monthlyChart.slice(0, comparisonMonth + 1).reduce((sum, value) => sum + value, 0) : 0;
-  const comparisonPrevious = comparisonMonth >= 0 ? previousYearChart.slice(0, comparisonMonth + 1).reduce((sum, value) => sum + value, 0) : 0;
+  const previousYearChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${previousChartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
+  const comparisonCurrent = monthlyChart.slice(0, chartMonthIndex + 1).reduce((sum, value) => sum + value, 0);
+  const comparisonPrevious = previousYearChart.slice(0, chartMonthIndex + 1).reduce((sum, value) => sum + value, 0);
   const comparisonDifference = comparisonCurrent - comparisonPrevious;
-  const comparisonPercent = comparisonPrevious ? comparisonDifference / comparisonPrevious * 100 : 0;
+  const comparisonPercent = comparisonPrevious ? comparisonDifference / comparisonPrevious * 100 : null;
   const comparisonTone = comparisonDifference > 0 ? 'positive' : comparisonDifference < 0 ? 'negative' : 'neutral';
-  const comparisonMonths = comparisonMonth >= 0 ? `Ene–${['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'][comparisonMonth]}` : '';
-  const chartMax = Math.max(1, ...monthlyChart);
+  const chartMax = Math.max(1, ...monthlyChart, ...previousYearChart);
   const targetLevelForStability = Math.min(level + 1, GAME_CONFIG.maxLevel);
   const stabilityIncomeTarget = requirementForLevel(targetLevelForStability).netMonthlyIncome;
   const importantTaskIndexes = taskItems.map((item, index) => ({ item, index })).filter(({ item }) => xpFromLabel(item[3]) >= 20).map(({ index }) => index);
@@ -555,8 +576,8 @@ export default function Home() {
     setProgression((current) => done ? revokeXp(current, reward) : grantXp(current, reward));
     setDoneTasks((current) => done ? current.filter((item) => item !== index) : [...current, index]);
   };
-  const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number) => setProgression((current) => {
-    let next = skillAmount > 0 ? grantXp(current, { id: `knowledge-theme:${taskId}`, date: dayKey(), general: 0, reason, type: 'special', skill: branch, skillAmount }) : current;
+  const toggleStudyProgress = (branch: string, taskId: string, reason: string, done: boolean, skillAmount: number, completedLevel?: number, generalAmount = 0) => setProgression((current) => {
+    let next = skillAmount > 0 || generalAmount > 0 ? grantXp(current, { id: `knowledge-theme:${taskId}`, date: dayKey(), general: generalAmount, reason, type: 'special', skill: branch, skillAmount }) : current;
     if (completedLevel) {
       next = grantXp(next, { id: `knowledge-level:${branch}:${completedLevel}`, date: dayKey(), general: knowledgeLevelGeneralXp(completedLevel), reason: `${branch}: Nivel ${completedLevel} completado`, type: 'special' });
       next = grantCoins(next, `coins:skill-level:${branch}:${completedLevel}`, COIN_CONFIG.skillLevelMilestones[completedLevel as keyof typeof COIN_CONFIG.skillLevelMilestones] || 0);
@@ -608,7 +629,7 @@ export default function Home() {
     if (!moneyModal || !Number.isFinite(amount) || amount < 0 || (moneyModal !== 'balance' && amount === 0)) return;
     if (moneyModal === 'balance') setCash(amount);
     else if (moneyModal === 'asset') setMoneyAssets((items) => [...items, { id: Date.now(), name: moneyConcept.trim() || 'Patrimonio', detail: moneyAssetKind === 'debt' ? 'Deuda registrada' : 'Valor registrado', value: amount, kind: moneyAssetKind }]);
-    else {
+    else if (moneyModal === 'income' || moneyModal === 'expense') {
       const type = moneyModal;
       setMoneyTransactions((items) => [{ id: Date.now(), type, concept: moneyConcept.trim() || (type === 'income' ? 'Ingreso' : 'Gasto'), amount, date: new Date().toISOString() }, ...items]);
       setCash((value) => value + (type === 'income' ? amount : -amount));
@@ -722,7 +743,20 @@ export default function Home() {
               <div className="moneyTotals"><article><span>▣ PATRIMONIO NETO</span><b>{formatMoney(totalWorth)}</b><small>MXN</small><em>Activos menos deudas</em></article><article><span>▤ DISPONIBLE</span><b>{formatMoney(cash)}</b><small>MXN</small><em>Dinero actual</em></article><article><span>◇ ACTIVOS NETOS</span><b>{formatMoney(assetsTotal - debtTotal)}</b><small>MXN</small><em>Ahorros, inversiones y activos</em></article></div>
               <div className="moneyActions"><button onClick={() => openMoneyModal('income')}><i>＋</i><span><b>INGRESO DEL MES</b><small>Registra tu ingreso</small></span></button><button onClick={() => openMoneyModal('expense')}><i>−</i><span><b>GASTO DEL MES</b><small>Registra tus gastos</small></span></button><button onClick={() => openMoneyModal('balance')}><i>↗</i><span><b>AJUSTAR DINERO ACTUAL</b><small>Actualiza tu saldo</small></span></button></div>
               <div className="moneyGrid"><article className="monthSummary"><header><b>▥ RESUMEN DEL MES</b><button onClick={() => openMoneyModal('transactions')}>Ver todo</button></header><p><span>Ingreso del mes</span><strong>{formatMoney(monthlyIncome)} ↑</strong></p><p><span>Gasto del mes</span><strong>−{formatMoney(monthlyExpense)} ↓</strong></p><p><span>Balance mensual</span><strong>{formatMoney(monthlyIncome - monthlyExpense)}</strong></p><p className="cashRow"><span>Dinero actual</span><strong>{formatMoney(cash)}</strong></p></article><article className="assetsSummary"><header><b>◇ PATRIMONIO <small>(tus activos suman a tu riqueza)</small></b><button onClick={() => openMoneyModal('assets')}>Ver todo</button></header>{moneyAssets.length ? moneyAssets.slice(0, 3).map((asset) => <p key={asset.id}><i>◇</i><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{formatMoney(asset.value)} <small>MXN</small></strong></p>) : <p className="emptyMoney">Aún no has registrado patrimonio.</p>}<button className="addAsset" onClick={() => openMoneyModal('asset')}>＋ Agregar patrimonio</button></article></div>
-              <article className="moneyChart"><header><b>▥ DINERO GANADO {chartYear}</b><div className="chartYears"><button className={chartYear === 2025 ? 'active' : ''} onClick={() => setChartYear(2025)}>2025</button><button className={chartYear === 2026 ? 'active' : ''} onClick={() => setChartYear(2026)}>2026</button></div>{comparisonPrevious > 0 ? <div className={`yearComparison ${comparisonTone}`}><strong>{comparisonDifference > 0 ? '▲' : comparisonDifference < 0 ? '▼' : '◆'} {formatSignedMoney(comparisonDifference)} este año</strong><small>{comparisonPercent > 0 ? '+' : comparisonPercent < 0 ? '−' : ''}{Math.abs(comparisonPercent).toLocaleString('es-MX', { maximumFractionDigits: 1 })}% vs {chartYear - 1} · {comparisonMonths}</small></div> : <div className="yearComparison neutral"><strong>◆ {formatMoney(annualIncome)} en {chartYear}</strong><small>Sin datos de {chartYear - 1} para comparar</small></div>}</header><div className="chartBars">{monthlyChart.map((value, index) => <i style={{height:`${value ? Math.max(4, value / chartMax * 100) : 0}%`}} key={index}><b>{value ? formatMoney(value) : '—'}</b>{value > 0 && <span />}</i>)}</div><div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div></article>
+              <article className="moneyChart comparisonChart">
+                <header><b>▥ DINERO GANADO <em>{previousChartYear}</em> vs <em>{chartYear}</em></b><div className={`yearComparisonSummary ${comparisonTone}`}><strong>{chartYear} acumulado: {formatMoney(comparisonCurrent)}</strong><span>{comparisonPercent === null ? 'Sin referencia' : `${comparisonDifference >= 0 ? '▲ +' : '▼ -'}${Math.abs(comparisonPercent).toLocaleString('es-MX', { maximumFractionDigits: 1 })}% vs ${previousChartYear}`}</span><span>{comparisonDifference >= 0 ? '▲ ' : '▼ '}{formatSignedMoney(comparisonDifference)} vs {previousChartYear}</span></div></header>
+                <div className="chartLegend"><span><i className="previous" />{previousChartYear}</span><span><i className="current" />{chartYear}</span></div>
+                <div className="chartBars grouped">{monthlyChart.map((value, index) => {
+                  const previous = previousYearChart[index];
+                  const future = index > chartMonthIndex;
+                  const difference = value - previous;
+                  const percent = previous ? `${difference >= 0 ? '+' : '−'}${Math.abs(difference / previous * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })}%` : 'N/A';
+                  const month = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][index];
+                  const tooltip = `${month}\n${previousChartYear}: ${formatMoney(previous)}\n${chartYear}: ${future ? 'Sin registrar' : formatMoney(value)}\nDiferencia: ${future ? '—' : formatSignedMoney(difference)}\nCambio: ${future ? '—' : percent}`;
+                  return <div className="chartGroup" title={tooltip} key={index}><i className="previous" style={{height:`${previous ? Math.max(4, previous / chartMax * 100) : 0}%`}}><b>{previous ? formatMoney(previous) : '$0'}</b>{previous > 0 && <span />}</i><i className={`current ${future ? 'future' : ''}`} style={{height:`${!future && value ? Math.max(4, value / chartMax * 100) : 0}%`}}><b>{future ? '—' : value ? formatMoney(value) : '$0'}</b>{!future && value > 0 && <span />}</i></div>;
+                })}</div>
+                <div className="chartMonths">{['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'].map((month) => <span key={month}>{month}</span>)}</div>
+              </article>
             </section>
           </section>
         ) : (

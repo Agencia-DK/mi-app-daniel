@@ -1,7 +1,8 @@
 export type StudyTask = { name: string; done: boolean; xpAwarded?: boolean };
 export type StudyModule = { name: string; tasks: StudyTask[] };
 export type StudyTopic = { name: string; progress: number; locked?: boolean; modules: StudyModule[] };
-export type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[] };
+export type StudyBook = { id: string; title: string; author: string; difficulty: 'Introductorio' | 'Intermedio' | 'Avanzado'; xp: number; done?: boolean; xpAwarded?: boolean };
+export type StudyBranch = { name: string; icon: string; level: number; tone: string; topics: StudyTopic[]; books?: StudyBook[] };
 
 const block = (name: string, items: string): StudyModule => ({
   name,
@@ -180,3 +181,39 @@ export const fullStudyBranches: StudyBranch[] = [
     ],
   },
 ];
+
+fullStudyBranches.push({
+  name: 'Comunicación', icon: '🎙️', level: 1, tone: 'blue', topics: [
+    level('Nivel 1 · Fundamentos', false,
+      block('Bases', 'Qué es la comunicación|Comunicación verbal y no verbal|Emisor, receptor, mensaje, canal y contexto|Comunicación efectiva|Escucha activa|Barreras de comunicación|Cómo expresarse con claridad|Comunicación asertiva'),
+      block('Conversación', 'Cómo iniciar conversaciones|Cómo mantener una conversación|Hacer buenas preguntas|Preguntas abiertas vs cerradas|Cómo demostrar interés|Cómo evitar conversaciones incómodas|Cómo cerrar una conversación|Adaptar el lenguaje a la persona')),
+    level('Nivel 2 · Comunicación interpersonal', true,
+      block('Inteligencia social', 'Leer el contexto social|Empatía|Rapport|Lenguaje corporal|Expresiones faciales|Contacto visual|Tono de voz|Ritmo y pausas al hablar|Detectar señales de interés o incomodidad'),
+      block('Asertividad', 'Decir no|Poner límites|Expresar desacuerdo|Dar una opinión sin generar conflicto|Pedir algo correctamente|Dar y recibir críticas|Feedback efectivo|Conversaciones difíciles')),
+    level('Nivel 3 · Persuasión y expresión', true,
+      block('Persuasión', 'Principios de persuasión|Credibilidad|Autoridad|Reciprocidad|Prueba social|Consistencia|Escasez|Persuasión ética|Cómo presentar argumentos|Cómo responder objeciones'),
+      block('Storytelling', 'Qué hace interesante una historia|Estructura inicio-conflicto-resolución|Storytelling aplicado a negocios|Storytelling aplicado a ventas|Uso de ejemplos y analogías|Crear tensión y curiosidad|Historias personales|Mensajes memorables')),
+    level('Nivel 4 · Oratoria y comunicación profesional', true,
+      block('Hablar en público', 'Control del miedo escénico|Preparar una presentación|Aperturas poderosas|Mantener la atención|Modulación de voz|Pausas|Lenguaje corporal en escenario|Uso de historias|Uso de diapositivas|Cierres poderosos|Improvisación|Sesiones de preguntas y respuestas'),
+      block('Comunicación profesional', 'Comunicación empresarial|Reuniones efectivas|Presentar una idea|Presentar un proyecto|Pitch de negocio|Elevator pitch|Negociaciones|Comunicación con clientes|Comunicación con empleados|Comunicación con socios|Comunicación escrita profesional|WhatsApp profesional|Correos efectivos')),
+    level('Nivel 5 · Dominio', true,
+      block('Comunicación avanzada', 'Influencia|Retórica|Ethos, Pathos y Logos|Argumentación|Pensamiento rápido al hablar|Comunicación bajo presión|Manejo de conflictos|Mediación|Negociaciones difíciles|Comunicación emocional|Comunicación de liderazgo|Inspirar y movilizar personas'),
+      block('Práctica experta', 'Dar una presentación de 10 minutos|Grabar un pitch de 60 segundos|Explicar una idea compleja de manera sencilla|Practicar storytelling|Mantener una conversación con un desconocido|Defender una idea ante objeciones|Simular una negociación|Dar feedback difícil|Liderar una reunión|Crear y presentar una propuesta de negocio')),
+  ],
+});
+
+const books = (items: [string, string, StudyBook['difficulty'], number][]): StudyBook[] => items.map(([title, author, difficulty, xp], index) => ({ id: `${index}-${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`, title, author, difficulty, xp }));
+const library: Record<string, StudyBook[]> = {
+  Marketing: books([['Esto es marketing','Seth Godin','Introductorio',250],['Marketing 5.0','Philip Kotler, Hermawan Kartajaya e Iwan Setiawan','Introductorio',350],['Positioning','Al Ries y Jack Trout','Intermedio',350],['Obviously Awesome','April Dunford','Intermedio',350],['How Brands Grow','Byron Sharp','Avanzado',500],['Marketing Management','Philip Kotler y Kevin Lane Keller','Avanzado',500]]),
+  Ventas: books([['Cómo ganar amigos e influir sobre las personas','Dale Carnegie','Introductorio',250],['To Sell Is Human','Daniel Pink','Introductorio',250],['SPIN Selling','Neil Rackham','Intermedio',350],['The Challenger Sale','Matthew Dixon y Brent Adamson','Intermedio',350],['Gap Selling','Keenan','Intermedio',350],['Never Split the Difference','Chris Voss','Avanzado',500],['The Psychology of Selling','Brian Tracy','Avanzado',350]]),
+  'Publicidad y adquisición': books([['Ogilvy on Advertising','David Ogilvy','Introductorio',250],['Scientific Advertising','Claude Hopkins','Introductorio',250],['Breakthrough Advertising','Eugene Schwartz','Intermedio',500],['Cashvertising','Drew Eric Whitman','Intermedio',350],['Made to Stick','Chip Heath y Dan Heath','Intermedio',350],['Alchemy','Rory Sutherland','Avanzado',500],['Tested Advertising Methods','John Caples','Avanzado',500]]),
+  'Investigación y validación': books([['The Mom Test','Rob Fitzpatrick','Introductorio',250],['Running Lean','Ash Maurya','Introductorio',350],['The Lean Startup','Eric Ries','Intermedio',350],['Testing Business Ideas','David Bland y Alexander Osterwalder','Intermedio',350],['Competing Against Luck','Clayton Christensen y otros','Avanzado',500],["The Innovator's Dilemma",'Clayton Christensen','Avanzado',500]]),
+  'Finanzas para negocios': books([['Financial Intelligence for Entrepreneurs','Karen Berman y Joe Knight','Introductorio',350],['Profit First','Mike Michalowicz','Introductorio',250],['The Personal MBA','Josh Kaufman','Intermedio',350],['Simple Numbers, Straight Talk, Big Profits!','Greg Crabtree','Intermedio',350],['Valuation','McKinsey & Company','Avanzado',500],['The Intelligent Investor','Benjamin Graham','Avanzado',500]]),
+  'Operaciones y sistemas': books([['The E-Myth Revisited','Michael Gerber','Introductorio',250],['Traction','Gino Wickman','Introductorio',350],['Clockwork','Mike Michalowicz','Intermedio',350],['Work the System','Sam Carpenter','Intermedio',350],['The Checklist Manifesto','Atul Gawande','Intermedio',350],['The Goal','Eliyahu Goldratt','Avanzado',500],['High Output Management','Andrew Grove','Avanzado',500]]),
+  'Analítica y decisiones': books([['Thinking in Bets','Annie Duke','Introductorio',250],['The Signal and the Noise','Nate Silver','Introductorio',350],['How to Measure Anything','Douglas Hubbard','Intermedio',350],['Superforecasting','Philip Tetlock y Dan Gardner','Intermedio',350],['Thinking, Fast and Slow','Daniel Kahneman','Avanzado',500],['The Art of Statistics','David Spiegelhalter','Avanzado',500]]),
+  'Psicología aplicada': books([['Influence','Robert Cialdini','Introductorio',350],['Predictably Irrational','Dan Ariely','Introductorio',250],['Pre-Suasion','Robert Cialdini','Intermedio',350],['Misbehaving','Richard Thaler','Intermedio',350],['Thinking, Fast and Slow','Daniel Kahneman','Avanzado',500],['Behave','Robert Sapolsky','Avanzado',500]]),
+  'Productividad y disciplina': books([['Atomic Habits','James Clear','Introductorio',250],['The One Thing','Gary Keller y Jay Papasan','Introductorio',250],['Deep Work','Cal Newport','Intermedio',350],['Getting Things Done','David Allen','Intermedio',350],['Essentialism','Greg McKeown','Intermedio',350],['The Effective Executive','Peter Drucker','Avanzado',500],['Four Thousand Weeks','Oliver Burkeman','Avanzado',350]]),
+  'Liderazgo y personas': books([['The One Minute Manager','Ken Blanchard y Spencer Johnson','Introductorio',250],['Leaders Eat Last','Simon Sinek','Introductorio',350],['Radical Candor','Kim Scott','Intermedio',350],['Multipliers','Liz Wiseman','Intermedio',350],['The Five Dysfunctions of a Team','Patrick Lencioni','Intermedio',350],['High Output Management','Andrew Grove','Avanzado',500],['The Hard Thing About Hard Things','Ben Horowitz','Avanzado',500]]),
+  Comunicación: books([['Cómo ganar amigos e influir sobre las personas','Dale Carnegie','Introductorio',250],['How to Talk to Anyone','Leil Lowndes','Introductorio',250],['Crucial Conversations','Kerry Patterson y otros','Intermedio',350],['Made to Stick','Chip Heath y Dan Heath','Intermedio',350],['Talk Like TED','Carmine Gallo','Intermedio',350],['Never Split the Difference','Chris Voss','Avanzado',500],['Thank You for Arguing','Jay Heinrichs','Avanzado',500],["The Storyteller's Secret",'Carmine Gallo','Avanzado',350]]),
+};
+fullStudyBranches.forEach((branch) => { branch.books = library[branch.name] || []; });
