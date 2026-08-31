@@ -12,8 +12,10 @@ import { STABILITY_CONFIG, financialStability, stabilityClassification, stabilit
 import StoreView from './store';
 import IdeasView from './ideas';
 
-const assetPrefix = typeof window !== 'undefined' && window.location.pathname.startsWith('/mi-app-daniel') ? '/mi-app-daniel' : '';
-const assetPath = (path: string) => path.startsWith(assetPrefix) ? path : `${assetPrefix}${path}`;
+const assetPath = (path: string) => {
+  const prefix = typeof window !== 'undefined' && window.location.pathname.startsWith('/mi-app-daniel') ? '/mi-app-daniel' : '';
+  return path.startsWith(prefix) ? path : `${prefix}${path}`;
+};
 
 type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: string; amount: number; date: string };
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
