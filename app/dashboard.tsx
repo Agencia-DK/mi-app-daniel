@@ -26,7 +26,6 @@ const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'c
 const formatSignedMoney = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatMoney(Math.abs(value))}`;
 const LEVEL_QUOTES = ['Cada paso cuenta. Sigue construyendo la vida que quieres.', 'La disciplina de hoy se convierte en la libertad de mañana.', 'No llegaste hasta aquí para detenerte ahora.', 'Tu constancia ya está dando resultados.', 'Lo difícil de ayer es la fuerza que tienes hoy.'];
 const dailyActivities = [
-  ['Tomar agua', '2 litros', '/icons/health.webp', '+5 XP'],
   ['Tomar Licuado/Almorzar', 'Comer bien', '/icons/morning-salad.png', '+5 XP'],
   ['Entrenamiento', '45 minutos', '/icons/exercise.webp', '+40 XP'],
   ['Estudiar', '1 hora', '/icons/study.webp', '+10 XP'],
@@ -374,18 +373,20 @@ export default function Home() {
       const savedReminderExpiry = JSON.parse(localStorage.getItem('daniel-os-reminder-expiry') || '{}') as Record<string, number>;
       const savedHistory = JSON.parse(localStorage.getItem('daniel-os-activity-history') || '{}') as Record<string, number>;
       const activityVersion = localStorage.getItem('daniel-os-activities-version');
-      if (activityVersion !== '2') {
-        const habits = savedHabits || dailyActivities;
+      if (activityVersion !== '3') {
+        const savedHabitList = savedHabits || dailyActivities;
+        const habits = savedHabitList.filter(([name]) => !/tomar agua/i.test(name));
         const requiredHabits = dailyActivities.filter((item) => ['Tomar Licuado/Almorzar', 'No fab', 'Prospección de clientes'].includes(item[0]));
         const migratedHabits = habits.map((item) => /trabajo profundo/i.test(item[0]) ? ['Trabajo profundo', '1 hora', '/icons/work.webp', '+10 XP'] : [item[0], item[1], iconForHabit(item[0]), /entrenamiento/i.test(item[0]) ? '+40 XP' : item[3]]);
         setActivityItems([...migratedHabits, ...requiredHabits.filter((item) => !migratedHabits.some(([name]) => name === item[0]))]);
+        if (savedDay === today) setDoneActivities(savedDoneHabits.filter((index) => !/tomar agua/i.test(savedHabitList[index]?.[0] || '')).map((index) => savedHabitList.slice(0, index).filter(([name]) => !/tomar agua/i.test(name)).length));
         setTaskItems([]);
         setReminderItems([]);
         setDoneTasks([]);
         setDoneReminders([]);
         setTaskExpiry({});
         setReminderExpiry({});
-        localStorage.setItem('daniel-os-activities-version', '2');
+        localStorage.setItem('daniel-os-activities-version', '3');
       } else {
         if (savedHabits) setActivityItems(savedHabits.map((item) => [item[0], item[1], iconForHabit(item[0]), /entrenamiento/i.test(item[0]) ? '+40 XP' : item[3]]));
         if (savedTasks) setTaskItems(savedDay && savedDay !== today ? savedTasks.filter((_, index) => !savedDoneTasks.includes(index)) : savedTasks);
@@ -395,7 +396,7 @@ export default function Home() {
       }
       setActivityHistory(savedHistory);
       setHistoryStart(localStorage.getItem('daniel-os-history-start') || today);
-      if (savedDay === today && activityVersion === '2') {
+      if (savedDay === today && activityVersion === '3') {
         setDoneActivities(savedDoneHabits);
         setDoneTasks(savedDoneTasks);
         setTaskExpiry(savedTaskExpiry);
