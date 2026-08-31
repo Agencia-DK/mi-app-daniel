@@ -5,8 +5,8 @@ import { XP_CONFIG, isCappedXp, type XpHistoryEntry, type XpReward } from './xpC
 export const GAME_CONFIG = {
   maxLevel: 40,
   storage: {
-    progression: 'daniel-os-progression-v2',
-    money: 'daniel-os-money-v2',
+    progression: 'daniel-os-progression-v4',
+    money: 'daniel-os-money-v3',
     study: 'daniel-os-study-v2',
   },
 } as const;
@@ -75,11 +75,33 @@ export const revokeXp = (state: ProgressionState, reward: XpReward) => {
 
 const dateKey = (date: Date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 export const habitStreak = (days: ProgressionState['habitDays'], today: Date) => {
-  const cursor = new Date(today);
-  const eligible = (key: string) => { const day = days[key]; return !!day && day.total > 0 && day.done / day.total >= 0.6 && day.total - day.done <= 1; };
-  if (!eligible(dateKey(cursor))) cursor.setDate(cursor.getDate() - 1);
-  let streak = 0;
-  while (eligible(dateKey(cursor))) { streak += 1; cursor.setDate(cursor.getDate() - 1); }
+  const monday = new Date(today);
+  monday.setHours(12, 0, 0, 0);
+  monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const weekStats = (start: Date, lastDay: number) => {
+    let complete = 0;
+    let forgiven = 0;
+    for (let index = 0; index <= lastDay; index += 1) {
+      const date = new Date(start);
+      date.setDate(start.getDate() + index);
+      const done = days[dateKey(date)]?.done || 0;
+      if (done >= 6) complete += 1;
+      else if (done === 5) forgiven += 1;
+    }
+    return { complete, forgiven };
+  };
+
+  const current = weekStats(monday, (today.getDay() + 6) % 7);
+  let streak = current.complete + Math.min(2, current.forgiven);
+  const cursor = new Date(monday);
+  cursor.setDate(cursor.getDate() - 7);
+  while (true) {
+    const week = weekStats(cursor, 6);
+    // ponytail: a closed week either satisfies the whole rule or ends the streak.
+    if (week.complete < 4 || week.forgiven > 2) break;
+    streak += week.complete + week.forgiven;
+    cursor.setDate(cursor.getDate() - 7);
+  }
   return streak;
 };
 
