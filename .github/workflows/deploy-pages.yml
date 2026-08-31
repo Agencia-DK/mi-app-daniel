@@ -36,11 +36,14 @@ jobs:
           pnpm exec vinext start --host 127.0.0.1 --port 4173 > /tmp/vinext.log 2>&1 &
           server_pid=$!
           trap 'kill $server_pid' EXIT
-          for attempt in {1..20}; do curl --fail --silent http://127.0.0.1:4173/mi-app-daniel/ > dist/client/index.html && break; sleep 1; done
-          test -s dist/client/index.html
+          mkdir -p dist/client/mi-app-daniel
+          for attempt in {1..20}; do curl --fail --silent http://127.0.0.1:4173/mi-app-daniel/ > dist/client/mi-app-daniel/index.html && break; sleep 1; done
+          cp -R dist/client/icons dist/client/levels dist/client/mi-app-daniel/
+          cp dist/client/{.nojekyll,favicon.svg,og.png,study-tree.png} dist/client/mi-app-daniel/
+          test -s dist/client/mi-app-daniel/index.html
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist/client
+          path: dist/client/mi-app-daniel
       - id: deployment
         uses: actions/deploy-pages@v4
