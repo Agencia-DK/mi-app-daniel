@@ -16,15 +16,10 @@ type MoneyTransaction = { id: number; type: 'income' | 'expense'; concept: strin
 type MoneyAsset = { id: number; name: string; detail: string; value: number; kind: 'savings' | 'investment' | 'asset' | 'debt' };
 type MoneyModal = 'income' | 'expense' | 'balance' | 'asset' | 'transactions' | 'assets' | null;
 const UI_STORAGE = 'daniel-os-ui-v1';
+const MONEY_VERSION = 'daniel-os-money-version';
 const formatMoney = (value: number) => value.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 });
 const formatSignedMoney = (value: number) => `${value > 0 ? '+' : value < 0 ? '−' : ''}${formatMoney(Math.abs(value))}`;
 const LEVEL_QUOTES = ['Cada paso cuenta. Sigue construyendo la vida que quieres.', 'La disciplina de hoy se convierte en la libertad de mañana.', 'No llegaste hasta aquí para detenerte ahora.', 'Tu constancia ya está dando resultados.', 'Lo difícil de ayer es la fuerza que tienes hoy.'];
-const HISTORICAL_INCOME: MoneyTransaction[] = [
-  ...[27000, 37400, 60600, 54350, 70000, 108000, 73000, 94600, 133000, 132000, 107000, 49000]
-    .map((amount, month) => ({ id: -(202500 + month + 1), type: 'income' as const, concept: `Ingreso ${new Date(2025, month).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}`, amount, date: `2025-${String(month + 1).padStart(2, '0')}-15T12:00:00.000Z` })),
-  ...[[1, 42600], [2, 40000], [3, 68800], [4, 71850], [5, 34000], [6, 40000], [7, 26800]]
-    .map(([month, amount]) => ({ id: -(202600 + month), type: 'income' as const, concept: `Ingreso ${new Date(2026, month - 1).toLocaleDateString('es-MX', { month: 'long', year: 'numeric' })}`, amount, date: `2026-${String(month).padStart(2, '0')}-15T12:00:00.000Z` })),
-];
 const dailyActivities = [
   ['Tomar agua', '2 litros', '/icons/health.webp', '+5 XP'],
   ['Tomar Licuado/Almorzar', 'Comer bien', '/icons/morning-salad.png', '+5 XP'],
@@ -239,6 +234,7 @@ export default function Home() {
   const [moneyModal, setMoneyModal] = useState<MoneyModal>(null);
   const [moneyConcept, setMoneyConcept] = useState('');
   const [moneyAmount, setMoneyAmount] = useState('');
+  const [moneyMonth, setMoneyMonth] = useState('');
   const [moneyAssetKind, setMoneyAssetKind] = useState<MoneyAsset['kind']>('asset');
   const [unlockedLevel, setUnlockedLevel] = useState<number | null>(null);
   const dailyResetInProgress = useRef(false);
@@ -284,6 +280,7 @@ export default function Home() {
   const isCurrentMonth = historyMonth.getFullYear() === new Date().getFullYear() && historyMonth.getMonth() === new Date().getMonth();
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const moneyMonthMin = `${now.getFullYear()}-01`;
   const monthlyTransactions = moneyTransactions.filter((item) => item.date.startsWith(currentMonth));
   const monthlyIncome = monthlyTransactions.filter((item) => item.type === 'income').reduce((sum, item) => sum + item.amount, 0);
   const monthlyExpense = monthlyTransactions.filter((item) => item.type === 'expense').reduce((sum, item) => sum + item.amount, 0);
@@ -423,12 +420,16 @@ export default function Home() {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(GAME_CONFIG.storage.money) || 'null') as { cash?: number; transactions?: MoneyTransaction[]; assets?: MoneyAsset[] } | null;
-      if (saved) {
+      if (localStorage.getItem(MONEY_VERSION) !== '1') {
+        setCash(0);
+        setMoneyTransactions([]);
+        setMoneyAssets([]);
+        localStorage.setItem(MONEY_VERSION, '1');
+      } else if (saved) {
         setCash(Number(saved.cash) || 0);
-        const historicalIds = new Set(HISTORICAL_INCOME.map((item) => item.id));
-        setMoneyTransactions([...(saved.transactions || []).filter((item) => !historicalIds.has(item.id)), ...HISTORICAL_INCOME]);
+        setMoneyTransactions(saved.transactions || []);
         setMoneyAssets((saved.assets || []).map((asset) => ({ ...asset, kind: asset.kind || 'asset' })));
-      } else setMoneyTransactions(HISTORICAL_INCOME);
+      }
     } catch { /* Empieza en cero si el registro local no es válido. */ }
     setMoneyReady(true);
   }, []);
@@ -726,7 +727,7 @@ export default function Home() {
     } else setReminderItems((current) => [...current, [name, description, itemCategory]]);
     setModalType(null);
   };
-  const openMoneyModal = (type: MoneyModal) => { setMoneyModal(type); setMoneyConcept(''); setMoneyAmount(''); setMoneyAssetKind('asset'); };
+  const openMoneyModal = (type: MoneyModal) => { setMoneyModal(type); setMoneyConcept(''); setMoneyAmount(''); setMoneyMonth(currentMonth); setMoneyAssetKind('asset'); };
   const saveMoney = () => {
     const amount = Number(moneyAmount);
     if (!moneyModal || !Number.isFinite(amount) || amount < 0 || (moneyModal !== 'balance' && amount === 0)) return;
@@ -734,7 +735,7 @@ export default function Home() {
     else if (moneyModal === 'asset') setMoneyAssets((items) => [...items, { id: Date.now(), name: moneyConcept.trim() || 'Patrimonio', detail: moneyAssetKind === 'debt' ? 'Deuda registrada' : 'Valor registrado', value: amount, kind: moneyAssetKind }]);
     else if (moneyModal === 'income' || moneyModal === 'expense') {
       const type = moneyModal;
-      setMoneyTransactions((items) => [{ id: Date.now(), type, concept: moneyConcept.trim() || (type === 'income' ? 'Ingreso' : 'Gasto'), amount, date: new Date().toISOString() }, ...items]);
+      setMoneyTransactions((items) => [{ id: Date.now(), type, concept: moneyConcept.trim() || (type === 'income' ? 'Ingreso' : 'Gasto'), amount, date: `${moneyMonth || currentMonth}-15T12:00:00.000Z` }, ...items]);
       setCash((value) => value + (type === 'income' ? amount : -amount));
     }
     setMoneyModal(null);
@@ -871,7 +872,7 @@ export default function Home() {
           </>
         )}
 
-        {moneyModal && <div className="modalBackdrop" role="presentation" onMouseDown={() => setMoneyModal(null)}><section className="itemModal moneyModal" role="dialog" aria-modal="true" aria-label="Registro de dinero" onMouseDown={(event) => event.stopPropagation()}><header><div><span>MI DINERO</span><h2>{moneyModal === 'income' ? 'Registrar ingreso' : moneyModal === 'expense' ? 'Registrar gasto' : moneyModal === 'balance' ? 'Ajustar dinero actual' : moneyModal === 'asset' ? 'Agregar patrimonio' : moneyModal === 'transactions' ? 'Todos los movimientos' : 'Todo mi patrimonio'}</h2></div><button onClick={() => setMoneyModal(null)} aria-label="Cerrar">×</button></header>{moneyModal === 'transactions' ? <div className="moneyDetailList">{moneyTransactions.length ? moneyTransactions.map((item) => <article key={item.id}><span><b>{item.concept}</b><small>{new Date(item.date).toLocaleDateString('es-MX')}</small></span><strong className={item.type}>{item.type === 'expense' ? '−' : '+'}{formatMoney(item.amount)}</strong></article>) : <p>No hay movimientos todavía.</p>}</div> : moneyModal === 'assets' ? <div className="moneyDetailList">{moneyAssets.length ? moneyAssets.map((asset) => <article key={asset.id}><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{asset.kind === 'debt' ? '−' : ''}{formatMoney(asset.value)}</strong></article>) : <p>No hay patrimonio registrado todavía.</p>}</div> : <><label>{moneyModal === 'asset' ? 'Nombre del patrimonio' : moneyModal === 'balance' ? 'Nota (opcional)' : 'Concepto'}<input autoFocus value={moneyConcept} onChange={(event) => setMoneyConcept(event.target.value)} placeholder={moneyModal === 'asset' ? 'Ej. Ahorros' : 'Ej. Venta del mes'} /></label><label>Cantidad MXN<input type="number" min="0" step="100" value={moneyAmount} onChange={(event) => setMoneyAmount(event.target.value)} placeholder="$0" /></label>{moneyModal === 'asset' && <fieldset><legend>Tipo</legend><div className="categoryOptions">{([['savings','Ahorro'],['investment','Inversión'],['asset','Activo'],['debt','Deuda']] as const).map(([kind, label]) => <button className={moneyAssetKind === kind ? 'selected' : ''} onClick={() => setMoneyAssetKind(kind)} key={kind}>{label}</button>)}</div></fieldset>}<button className="saveItem" onClick={saveMoney}>Guardar registro</button></>}</section></div>}
+        {moneyModal && <div className="modalBackdrop" role="presentation" onMouseDown={() => setMoneyModal(null)}><section className="itemModal moneyModal" role="dialog" aria-modal="true" aria-label="Registro de dinero" onMouseDown={(event) => event.stopPropagation()}><header><div><span>MI DINERO</span><h2>{moneyModal === 'income' ? 'Registrar ingreso' : moneyModal === 'expense' ? 'Registrar gasto' : moneyModal === 'balance' ? 'Ajustar dinero actual' : moneyModal === 'asset' ? 'Agregar patrimonio' : moneyModal === 'transactions' ? 'Todos los movimientos' : 'Todo mi patrimonio'}</h2></div><button onClick={() => setMoneyModal(null)} aria-label="Cerrar">×</button></header>{moneyModal === 'transactions' ? <div className="moneyDetailList">{moneyTransactions.length ? moneyTransactions.map((item) => <article key={item.id}><span><b>{item.concept}</b><small>{new Date(item.date).toLocaleDateString('es-MX')}</small></span><strong className={item.type}>{item.type === 'expense' ? '−' : '+'}{formatMoney(item.amount)}</strong></article>) : <p>No hay movimientos todavía.</p>}</div> : moneyModal === 'assets' ? <div className="moneyDetailList">{moneyAssets.length ? moneyAssets.map((asset) => <article key={asset.id}><span><b>{asset.name}</b><small>{asset.detail}</small></span><strong>{asset.kind === 'debt' ? '−' : ''}{formatMoney(asset.value)}</strong></article>) : <p>No hay patrimonio registrado todavía.</p>}</div> : <><label>{moneyModal === 'asset' ? 'Nombre del patrimonio' : moneyModal === 'balance' ? 'Nota (opcional)' : 'Concepto'}<input autoFocus value={moneyConcept} onChange={(event) => setMoneyConcept(event.target.value)} placeholder={moneyModal === 'asset' ? 'Ej. Ahorros' : 'Ej. Venta del mes'} /></label>{(moneyModal === 'income' || moneyModal === 'expense') && <label>Selecciona mes<input type="month" min={moneyMonthMin} max={currentMonth} value={moneyMonth} onChange={(event) => setMoneyMonth(event.target.value)} /></label>}<label>Cantidad MXN<input type="number" min="0" step="100" value={moneyAmount} onChange={(event) => setMoneyAmount(event.target.value)} placeholder="$0" /></label>{moneyModal === 'asset' && <fieldset><legend>Tipo</legend><div className="categoryOptions">{([['savings','Ahorro'],['investment','Inversión'],['asset','Activo'],['debt','Deuda']] as const).map(([kind, label]) => <button className={moneyAssetKind === kind ? 'selected' : ''} onClick={() => setMoneyAssetKind(kind)} key={kind}>{label}</button>)}</div></fieldset>}<button className="saveItem" onClick={saveMoney}>Guardar registro</button></>}</section></div>}
         {modalType && <div className="modalBackdrop" role="presentation" onMouseDown={() => setModalType(null)}><section className="itemModal" role="dialog" aria-modal="true" aria-label={modalType === 'habit' ? 'Agregar hábito' : 'Agregar pendiente'} onMouseDown={(event) => event.stopPropagation()}><header><div><span>{modalType === 'habit' ? 'NUEVO HÁBITO' : modalType === 'task' ? 'NUEVA TAREA' : 'NUEVO RECORDATORIO'}</span><h2>{modalType === 'habit' ? 'Agregar hábito' : modalType === 'task' ? 'Agregar pendiente' : 'Pendiente general'}</h2></div><button onClick={() => setModalType(null)} aria-label="Cerrar">×</button></header><label>{modalType === 'habit' ? 'Hábito' : 'Tarea'}<input autoFocus value={itemName} onChange={(event) => setItemName(event.target.value)} placeholder={modalType === 'habit' ? 'Ej. Ir al gimnasio' : 'Ej. Llamar a proveedor'} /></label><label>Descripción {modalType === 'habit' && <small>Máximo 3 palabras</small>}<input value={itemDescription} onChange={(event) => setItemDescription(modalType === 'habit' ? event.target.value.split(/\s+/).slice(0, 3).join(' ') : event.target.value)} placeholder="Detalle breve" /></label>{modalType === 'reminder' ? <fieldset><legend>Categoría</legend><div className="categoryOptions">{reminderCategories.map((category) => <button className={itemCategory === category ? 'selected' : ''} onClick={() => setItemCategory(category)} key={category}>{category}</button>)}</div><p className="noReward">Este recordatorio no otorga XP ni monedas.</p></fieldset> : <fieldset><legend>Valor XP</legend><div className="xpOptions">{(modalType === 'habit' ? habitXp : taskXp).map(([xp, label]) => <button className={itemXp === xp ? 'selected' : ''} onClick={() => setItemXp(xp)} key={xp}><b>{xp} XP</b><span>{label}</span></button>)}</div></fieldset>}<button className="saveItem" onClick={saveItem}>Guardar {modalType === 'habit' ? 'hábito' : modalType === 'task' ? 'tarea' : 'recordatorio'}</button></section></div>}
         {habitToDelete !== null && <div className="modalBackdrop" role="presentation" onMouseDown={() => setHabitToDelete(null)}><section className="deleteModal" role="alertdialog" aria-modal="true" aria-labelledby="delete-habit-title" onMouseDown={(event) => event.stopPropagation()}><span>ELIMINAR HÁBITO</span><h2 id="delete-habit-title">¿Quieres borrar “{activityItems[habitToDelete]?.[0]}”?</h2><p>El hábito dejará de aparecer en tu lista diaria.</p><div><button onClick={() => setHabitToDelete(null)}>Cancelar</button><button className="confirmDelete" onClick={deleteHabit}>Confirmar</button></div></section></div>}
         {showHistory && <div className="modalBackdrop" role="presentation" onMouseDown={() => setShowHistory(false)}><section className="historyModal" role="dialog" aria-modal="true" aria-label="Historial mensual de hábitos" onMouseDown={(event) => event.stopPropagation()}><header><div><span>HISTORIAL DE HÁBITOS</span><h2>{monthLabel}</h2></div><button onClick={() => setShowHistory(false)} aria-label="Cerrar">×</button></header><div className="monthControls"><button onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))}>‹ Mes anterior</button><p>El historial comienza el {new Date(`${historyStart}T12:00:00`).toLocaleDateString('es-MX', { day: 'numeric', month: 'long', year: 'numeric' })}</p><button disabled={isCurrentMonth} onClick={() => setHistoryMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))}>Mes siguiente ›</button></div><div className="monthWeekdays">{['L','M','X','J','V','S','D'].map((day) => <b key={day}>{day}</b>)}</div><div className="monthGrid">{monthCalendar.map((cell, index) => cell ? <article className={`${cell.key === dayKey() ? 'today' : ''} ${cell.key < historyStart || cell.key > dayKey() ? 'emptyDay' : ''}`} key={cell.key}><span>{cell.day}</span>{activityHistory[cell.key] === undefined ? <small>—</small> : <><div><i style={{ height: `${activityHistory[cell.key]}%` }} /></div><b>{activityHistory[cell.key]}%</b></>}</article> : <i key={`empty-${index}`} />)}</div><footer><span><i /> Sin actividad</span><span><i /> Progreso registrado</span></footer></section></div>}
