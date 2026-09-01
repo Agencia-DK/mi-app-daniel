@@ -298,12 +298,11 @@ export default function Home() {
   const chartYear = now.getFullYear();
   const previousChartYear = chartYear - 1;
   const chartMonthIndex = now.getMonth();
-  const lastCompletedMonthIndex = chartMonthIndex - 1;
-  const comparisonCutoff = new Date(chartYear, Math.max(0, lastCompletedMonthIndex)).toLocaleDateString('es-MX', { month: 'long' });
+  const comparisonCutoff = new Date(chartYear, chartMonthIndex).toLocaleDateString('es-MX', { month: 'long' });
   const monthlyChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${chartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
   const previousYearChart = Array.from({ length: 12 }, (_, month) => moneyTransactions.filter((item) => item.type === 'income' && item.date.startsWith(`${previousChartYear}-${String(month + 1).padStart(2, '0')}`)).reduce((sum, item) => sum + item.amount, 0));
-  const comparisonCurrent = monthlyChart.slice(0, chartMonthIndex).reduce((sum, value) => sum + value, 0);
-  const comparisonPrevious = previousYearChart.slice(0, chartMonthIndex).reduce((sum, value) => sum + value, 0);
+  const comparisonCurrent = monthlyChart.slice(0, chartMonthIndex + 1).reduce((sum, value) => sum + value, 0);
+  const comparisonPrevious = previousYearChart.slice(0, chartMonthIndex + 1).reduce((sum, value) => sum + value, 0);
   const comparisonDifference = comparisonCurrent - comparisonPrevious;
   const comparisonPercent = comparisonPrevious ? comparisonDifference / comparisonPrevious * 100 : null;
   const comparisonTone = comparisonDifference > 0 ? 'positive' : comparisonDifference < 0 ? 'negative' : 'neutral';
@@ -849,7 +848,7 @@ export default function Home() {
                 <div className="chartLegend"><span><i className="previous" />{previousChartYear}</span><span><i className="current" />{chartYear}</span></div>
                 <div className="chartBars grouped">{monthlyChart.map((value, index) => {
                   const previous = previousYearChart[index];
-                  const future = index > lastCompletedMonthIndex;
+                  const future = index > chartMonthIndex;
                   const difference = value - previous;
                   const percent = previous ? `${difference >= 0 ? '+' : '−'}${Math.abs(difference / previous * 100).toLocaleString('es-MX', { maximumFractionDigits: 2 })}%` : 'N/A';
                   const month = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][index];
